@@ -1,0 +1,20 @@
+.empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  max-inline-size: 32rem;
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--ink);
+}
+
+.title {
+  font-size: var(--title-sm);
+}
+
+.text {
+  color: var(--ink-2);
+}
+
+.action {
+  margin-block-start: var(--space-4);
+}

@@ -1,0 +1,86 @@
+/* Mobile first: a tab bar fixed to the bottom, within thumb reach. */
+.nav {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 10;
+  padding-block-end: env(safe-area-inset-bottom);
+  border-block-start: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0 auto;
+  padding: 0 var(--space-3);
+  max-inline-size: 30rem;
+  list-style: none;
+}
+
+.link {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.2rem;
+  min-block-size: var(--tabbar-height);
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.link:hover,
+.link[aria-current='page'] {
+  color: var(--ink);
+}
+
+.icon {
+  inline-size: 1.4rem;
+  block-size: 1.4rem;
+}
+
+/* The active section is marked by a short accent rule on the edge. */
+.marker {
+  position: absolute;
+  inset-block-start: -1px;
+  inset-inline: 26%;
+  block-size: 2px;
+  background: var(--accent);
+}
+
+/* Desktop: the same links sit in the header bar. */
+@media (min-width: 48rem) {
+  .nav {
+    position: static;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+
+  .list {
+    display: flex;
+    gap: var(--space-6);
+    padding: 0;
+    max-inline-size: none;
+  }
+
+  .link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: var(--topbar-height);
+    font-size: var(--text-ui);
+  }
+
+  .icon {
+    inline-size: 1.2rem;
+    block-size: 1.2rem;
+  }
+
+  .marker {
+    inset-block: auto -1px;
+    inset-inline: 0;
+  }
+}

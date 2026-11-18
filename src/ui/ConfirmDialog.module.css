@@ -1,0 +1,47 @@
+.dialog {
+  inline-size: min(28rem, calc(100% - 2 * var(--gutter)));
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow:
+    0 0 0 1px var(--line-2),
+    0 30px 60px -30px rgb(0 0 0 / 0.45);
+}
+
+.dialog[open] {
+  animation: rise var(--duration) var(--ease-out);
+}
+
+.dialog::backdrop {
+  background: rgb(14 19 34 / 0.42);
+}
+
+.body {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-5) var(--space-4);
+}
+
+.title {
+  font-size: var(--title-sm);
+}
+
+.text {
+  color: var(--ink-2);
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  padding: 0 var(--space-5) var(--space-5);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}

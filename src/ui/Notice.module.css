@@ -1,0 +1,17 @@
+.notice {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-inline-start: 3px solid var(--line-2);
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+
+.error {
+  border-inline-start-color: var(--no);
+  background: var(--no-soft);
+}
+
+.title {
+  font-weight: 650;
+}
