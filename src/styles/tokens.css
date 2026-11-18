@@ -24,6 +24,10 @@
   --no: #b3362c;
   --no-soft: #f6e4e1;
 
+  /* Vote charts: first choices solid, second choices one step lighter (validated). */
+  --chart-first: #2c7a4b;
+  --chart-second: #72b38c;
+
   --shadow-cover: 0 1px 2px rgb(0 0 0 / 0.2), 0 24px 36px -18px rgb(10 14 30 / 0.55);
 
   --serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
@@ -92,6 +96,9 @@
     --yes-soft: #15291f;
     --no: #ef8a7f;
     --no-soft: #2f1a19;
+
+    --chart-first: #7fcf9f;
+    --chart-second: #2f6a48;
 
     --shadow-cover: 0 1px 2px rgb(0 0 0 / 0.45), 0 24px 36px -18px rgb(0 0 0 / 0.75);
   }

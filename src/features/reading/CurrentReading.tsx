@@ -1,7 +1,8 @@
 import { useId } from 'react';
 
 import { splitTitle } from '@/domain/book';
-import type { Cycle, DecisionMethod, Winner } from '@/domain/types';
+import type { Cycle, Winner } from '@/domain/types';
+import { CHOSEN } from '@/features/club/methods';
 import { BookCover } from '@/ui/BookCover';
 import { buttonClass } from '@/ui/button-class';
 import { cx } from '@/ui/cx';
@@ -11,14 +12,6 @@ import { ExternalIcon } from '@/ui/icons';
 import styles from './CurrentReading.module.css';
 import { FinishedReading } from './FinishedReading';
 import { ReadingSynopsis } from './ReadingSynopsis';
-
-/** "Escolhida …": how the club got to this book. */
-const CHOSEN: Record<DecisionMethod, string> = {
-  votes: 'na votação',
-  'first-choices': 'no desempate',
-  draw: 'no sorteio',
-  unopposed: 'sem disputa',
-};
 
 /** Long titles step down a size so they do not break mid-word on a phone. */
 const LONG_TITLE = 26;

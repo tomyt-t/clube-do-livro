@@ -1,0 +1,61 @@
+/* Each round under a ruled line, like the sections on the reading page. */
+.record {
+  display: grid;
+  gap: 1.25rem;
+  padding-block: 0.875rem 0.5rem;
+  border-block-start: 1px solid var(--ink);
+  scroll-margin-block-start: calc(var(--topbar-height) + var(--space-4));
+}
+
+.header {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  gap: 0.875rem;
+  align-items: end;
+}
+
+.cover {
+  inline-size: 100%;
+}
+
+.number {
+  color: var(--ink-2);
+  font: italic 500 0.875rem var(--serif);
+}
+
+.title {
+  margin-block-start: 0.25rem;
+  font-size: 1.5rem;
+  line-height: 1.05;
+  overflow-wrap: break-word;
+}
+
+.author {
+  margin-block-start: 0.25rem;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+
+.meta {
+  margin-block-start: 0.375rem;
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+}
+
+.draw {
+  font-size: var(--text-sm);
+}
+
+.draw summary {
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.draw p {
+  max-inline-size: 36rem;
+  margin-block-start: var(--space-2);
+  color: var(--ink-2);
+  line-height: 1.45;
+}
