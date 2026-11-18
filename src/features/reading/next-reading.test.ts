@@ -13,6 +13,7 @@ const winner = (title: string) => ({
   book: makeBook({ title }),
   method: 'votes' as const,
   decidedAt: yesterday,
+  drawnFrom: [],
 });
 
 describe('nextReadingOf', () => {

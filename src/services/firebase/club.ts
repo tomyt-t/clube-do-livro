@@ -3,10 +3,10 @@ import { orderBy, query } from 'firebase/firestore';
 import type { ClubPort } from '../backend';
 
 import type { FirebaseServices } from './app';
-import { toCycle, toMember, toNomination, toOwnAnswer } from './converters';
+import { toCycle, toMember, toNomination, toOwnAnswer, toSettings } from './converters';
 import { guard } from './errors';
 import { dataOf, listenToDoc, listenToQuery } from './listen';
-import { answerNominationCall, castBallot, saveMemberProfile } from './member-writes';
+import { answerNominationCall, castBallot, markFinished, saveMemberProfile } from './member-writes';
 import { refs } from './refs';
 
 export function createFirebaseClub({ db }: FirebaseServices): ClubPort {
@@ -37,5 +37,13 @@ export function createFirebaseClub({ db }: FirebaseServices): ClubPort {
     answerNominationCall: (input) => guard(answerNominationCall(db, input)),
 
     castBallot: (input) => guard(castBallot(db, input)),
+
+    watchSettings: (subscriber) =>
+      listenToDoc(refs.settings(db), (snapshot) => toSettings(dataOf(snapshot)), subscriber),
+
+    watchHasFinished: (cycleId, uid, subscriber) =>
+      listenToDoc(refs.reader(db, cycleId, uid), (snapshot) => snapshot.exists(), subscriber),
+
+    markFinished: ({ cycleId, uid }) => guard(markFinished(db, cycleId, uid)),
   };
 }

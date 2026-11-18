@@ -38,10 +38,26 @@ export const RESPONDED: Verb = {
 
 export const VOTED: Verb = { one: 'votou', many: 'votaram', nobody: 'Ninguém votou ainda.' };
 
+export const FINISHED: Verb = {
+  one: 'terminou',
+  many: 'terminaram',
+  nobody: 'Ninguém terminou ainda.',
+};
+
 /** "Ninguém votou ainda.", "1 pessoa votou.", "3 pessoas votaram." */
 export function peopleWho(count: number, verb: Verb): string {
   if (count === 0) return verb.nobody;
   return count === 1 ? `1 pessoa ${verb.one}.` : `${String(count)} pessoas ${verb.many}.`;
+}
+
+/**
+ * "3 de 6 responderam.", as in the prototype; without a known total it
+ * falls back to "3 pessoas responderam.".
+ */
+export function peopleOutOf(count: number, total: number, verb: Verb): string {
+  if (total <= 0) return peopleWho(count, verb);
+  if (count === 0) return verb.nobody;
+  return `${String(count)} de ${String(total)} ${count === 1 ? verb.one : verb.many}.`;
 }
 
 /** "1 leitura", "3 leituras". */

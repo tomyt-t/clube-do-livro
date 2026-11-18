@@ -1,0 +1,86 @@
+import { getDoc, serverTimestamp, updateDoc, writeBatch, type Firestore } from 'firebase/firestore';
+
+import { cycleIdFor } from '@/domain/flow';
+import { emptyResults } from '@/domain/tally';
+import type { Book, CycleId, DecisionMethod, NominationId, VoteResults } from '@/domain/types';
+
+import { toResults } from './converters';
+import { newCycleData } from './cycle-data';
+import { refs } from './refs';
+
+/**
+ * The steps that move a cycle along. `firestore.rules` lets any member take
+ * one once everyone has done their part, and the organizer at any time.
+ */
+
+interface StartVotingInput {
+  cycleId: CycleId;
+  options: readonly NominationId[];
+  votingDeadline: Date | null;
+}
+
+/** Fixes the ballot's options and opens an empty tally, in one batch. */
+export async function startVoting(db: Firestore, input: StartVotingInput) {
+  const { cycleId, options, votingDeadline } = input;
+  const batch = writeBatch(db);
+  batch.update(refs.cycle(db, cycleId), {
+    status: 'voting',
+    options: [...options],
+    ballots: 0,
+    votingOpenedAt: serverTimestamp(),
+    votingDeadline,
+  });
+  batch.set(refs.tally(db, cycleId), emptyResults(options));
+  await batch.commit();
+}
+
+/** The server's closing time also fixes any draw. */
+export async function closeVoting(db: Firestore, cycleId: CycleId) {
+  await updateDoc(refs.cycle(db, cycleId), {
+    status: 'tallying',
+    votingClosedAt: serverTimestamp(),
+  });
+}
+
+/** The tally becomes readable once voting has closed. */
+export async function readResults(db: Firestore, cycleId: CycleId): Promise<VoteResults> {
+  const snapshot = await getDoc(refs.tally(db, cycleId));
+  const results = toResults(snapshot.data());
+  if (!results) throw new Error('Apuração ilegível.');
+  return results;
+}
+
+interface DeclareWinnerInput {
+  cycleId: CycleId;
+  nominationId: NominationId;
+  /** Must be the nomination's book exactly as stored. */
+  book: Book;
+  method: DecisionMethod;
+  drawnFrom: readonly NominationId[];
+  /** Must be the tally exactly as stored. */
+  results: VoteResults;
+  startReading: boolean;
+}
+
+export async function declareWinner(db: Firestore, input: DeclareWinnerInput) {
+  const { cycleId, nominationId, book, method, drawnFrom, results, startReading } = input;
+  await updateDoc(refs.cycle(db, cycleId), {
+    status: startReading ? 'reading' : 'upcoming',
+    winner: { nominationId, book, method, decidedAt: serverTimestamp(), drawnFrom: [...drawnFrom] },
+    results,
+    readingStartedAt: startReading ? serverTimestamp() : null,
+  });
+}
+
+/** Ends the book and opens the next round in one batch, so it happens once. */
+export async function finishAndOpenNext(
+  db: Firestore,
+  { cycleId, nextNumber }: { cycleId: CycleId; nextNumber: number },
+): Promise<CycleId> {
+  const nextId = cycleIdFor(nextNumber);
+  const batch = writeBatch(db);
+  batch.update(refs.cycle(db, cycleId), { status: 'finished', finishedAt: serverTimestamp() });
+  batch.set(refs.cycle(db, nextId), newCycleData(nextNumber, null));
+  await batch.commit();
+  return nextId;
+}

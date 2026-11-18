@@ -1,0 +1,26 @@
+/* The reader's own mark and how many have finished, on one line. */
+.finished {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin-block-start: 1.625rem;
+}
+
+.done {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--yes);
+  font-size: var(--text-ui);
+  font-weight: 650;
+}
+
+.done svg {
+  stroke-width: 2.2;
+}
+
+.count {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}

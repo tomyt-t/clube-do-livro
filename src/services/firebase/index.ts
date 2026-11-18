@@ -6,6 +6,7 @@ import { createFirebaseAdmin } from './admin';
 import { initFirebase } from './app';
 import { createFirebaseAuth } from './auth';
 import { createFirebaseClub } from './club';
+import { createFirebaseFlow } from './flow';
 
 type FirebaseAppConfig = Extract<AppConfig, { mode: 'firebase' }>;
 
@@ -15,6 +16,7 @@ export function createFirebaseBackend(config: FirebaseAppConfig): Backend {
     kind: 'firebase',
     auth: createFirebaseAuth(services),
     club: createFirebaseClub(services),
+    flow: createFirebaseFlow(services),
     admin: createFirebaseAdmin(services),
   };
 }

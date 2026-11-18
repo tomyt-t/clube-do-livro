@@ -3,10 +3,10 @@ import { isPastDeadline } from '@/domain/cycle';
 import type { Cycle, Nomination, OwnAnswer } from '@/domain/types';
 import { ownNominationOf } from '@/domain/voting';
 import { useMember } from '@/features/auth/session';
-import { useNominations, useOwnAnswer } from '@/features/club/use-club';
+import { useMemberCount, useNominations, useOwnAnswer } from '@/features/club/use-club';
 import type { Watched } from '@/app/use-watch';
 import { describeError } from '@/ui/describe-error';
-import { peopleWho, RESPONDED, until } from '@/ui/format';
+import { peopleOutOf, RESPONDED, until } from '@/ui/format';
 import { Notice } from '@/ui/Notice';
 import { Loading } from '@/ui/Spinner';
 
@@ -68,11 +68,12 @@ export function NominationStep({ cycle }: { cycle: Cycle }) {
   const { user } = useMember();
   const answer = useOwnAnswer(cycle.id, user.uid);
   const nominations = useNominations(cycle.id);
+  const members = useMemberCount();
   const closed = isPastDeadline(cycle.nominationDeadline);
   const own = answer.status === 'ready' ? ownNominationOf(answer.value) : null;
   const meta = [
     closed ? null : until(cycle.nominationDeadline),
-    peopleWho(cycle.responses, RESPONDED),
+    peopleOutOf(cycle.responses, members, RESPONDED),
   ];
 
   return (

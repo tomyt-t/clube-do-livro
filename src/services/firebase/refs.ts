@@ -27,4 +27,8 @@ export const refs = {
   tally: (db: Firestore, cycleId: CycleId) => doc(db, 'cycles', cycleId, 'tally', 'counts'),
   receipt: (db: Firestore, cycleId: CycleId, uid: MemberId) =>
     doc(db, 'cycles', cycleId, 'receipts', uid),
+  reader: (db: Firestore, cycleId: CycleId, uid: MemberId) =>
+    doc(db, 'cycles', cycleId, 'readers', uid),
+
+  settings: (db: Firestore) => doc(db, 'settings', 'club'),
 };

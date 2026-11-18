@@ -1,4 +1,12 @@
-import { doc, FieldPath, increment, setDoc, writeBatch, type Firestore } from 'firebase/firestore';
+import {
+  arrayUnion,
+  doc,
+  FieldPath,
+  increment,
+  setDoc,
+  writeBatch,
+  type Firestore,
+} from 'firebase/firestore';
 
 import type { CycleId, MemberId, NominationAnswer, NominationId } from '@/domain/types';
 
@@ -48,7 +56,12 @@ export async function answerNominationCall(
     batch.set(nomination, { book: toBookData(answer.book) });
   }
   batch.set(refs.answer(db, cycleId, uid), { nominationId });
-  batch.update(refs.cycle(db, cycleId), { responses: increment(1) });
+  batch.update(
+    refs.cycle(db, cycleId),
+    nominationId
+      ? { responses: increment(1), nominationIds: arrayUnion(nominationId) }
+      : { responses: increment(1) },
+  );
 
   await batch.commit();
   return nominationId;
@@ -79,5 +92,13 @@ export async function castBallot(db: Firestore, { cycleId, uid, choices }: Ballo
     increment(1),
     ...choices.flatMap((choice) => [new FieldPath('votes', choice), increment(1)]),
   );
+  await batch.commit();
+}
+
+/** "Acabei de ler!": an empty mark says *that* the member finished, the count says how many. */
+export async function markFinished(db: Firestore, cycleId: CycleId, uid: MemberId) {
+  const batch = writeBatch(db);
+  batch.set(refs.reader(db, cycleId, uid), {});
+  batch.update(refs.cycle(db, cycleId), { finishedReaders: increment(1) });
   await batch.commit();
 }

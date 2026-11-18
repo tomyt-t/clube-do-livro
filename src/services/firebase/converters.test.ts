@@ -52,10 +52,15 @@ describe('toCycle', () => {
     const winner = {
       nominationId: 'n1',
       book: makeBook(),
-      method: 'first-choices',
+      method: 'draw',
       decidedAt: stamp,
+      drawnFrom: ['a', 'n1', 7],
     };
-    expect(toCycle('c3', { ...raw, winner })?.winner).toEqual({ ...winner, decidedAt: at });
+    expect(toCycle('c3', { ...raw, winner })?.winner).toEqual({
+      ...winner,
+      decidedAt: at,
+      drawnFrom: ['a', 'n1'],
+    });
   });
 
   it('skips cycles with an unknown status or no creation date', () => {

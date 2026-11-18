@@ -8,6 +8,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   /** Full width of its container. */
   block?: boolean;
+  /** The 44px button that sits beside a line of text. */
+  compact?: boolean;
   /** Shows a spinner and blocks clicks while an action runs. */
   busy?: boolean;
 }
@@ -15,6 +17,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export function Button({
   variant = 'primary',
   block = false,
+  compact = false,
   busy = false,
   type = 'button',
   className,
@@ -26,7 +29,7 @@ export function Button({
     <button
       {...props}
       type={type}
-      className={buttonClass({ variant, block, className })}
+      className={buttonClass({ variant, block, compact, className })}
       disabled={disabled === true || busy}
       aria-busy={busy || undefined}
     >

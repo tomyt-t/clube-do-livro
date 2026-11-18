@@ -1,3 +1,6 @@
+import { drawOrder } from '@/domain/draw';
+import { cycleIdFor } from '@/domain/flow';
+import { finalists } from '@/domain/tally';
 import type { Cycle, DecisionMethod, VoteResults } from '@/domain/types';
 
 import { DEMO_BOOKS } from './books';
@@ -25,7 +28,6 @@ export const DEMO_ADMIN = 'marina';
 const OUTSIDER = 'visitante';
 
 interface PastCycle {
-  id: string;
   number: number;
   winner: BookKey;
   method: DecisionMethod;
@@ -43,28 +45,44 @@ function resultsOf(past: PastCycle): VoteResults {
   };
 }
 
+/**
+ * A draw is fixed by the closing time, so the demo picks a closing time that
+ * really gives the seeded winner: anyone can check it like a real one.
+ */
+function closingTimeFor(past: PastCycle, around: Date): Date {
+  if (past.method !== 'draw') return around;
+  const order = drawOrder(finalists(Object.keys(past.results), resultsOf(past)));
+  const ms = around.getTime();
+  return new Date(ms - (ms % order.length) + order.indexOf(past.winner));
+}
+
 function pastCycle(now: Date, past: PastCycle): Cycle {
-  const decidedAt = daysAgo(now, past.startedDaysAgo);
+  const decidedAt = closingTimeFor(past, daysAgo(now, past.startedDaysAgo));
+  const options = Object.keys(past.results);
+  const results = resultsOf(past);
   return {
-    id: past.id,
+    id: cycleIdFor(past.number),
     number: past.number,
     status: past.finishedDaysAgo === null ? 'reading' : 'finished',
     responses: 6,
+    nominationIds: options,
     nominationDeadline: null,
     votingDeadline: null,
     createdAt: daysAgo(now, past.startedDaysAgo + 7),
-    options: Object.keys(past.results),
+    options,
     ballots: 6,
     votingOpenedAt: daysAgo(now, past.startedDaysAgo + 3),
     votingClosedAt: decidedAt,
-    results: resultsOf(past),
+    results,
     winner: {
       nominationId: past.winner,
       book: DEMO_BOOKS[past.winner],
       method: past.method,
       decidedAt,
+      drawnFrom: past.method === 'draw' ? drawOrder(finalists(options, results)) : [],
     },
     readingStartedAt: decidedAt,
+    finishedReaders: past.finishedDaysAgo === null ? 0 : 6,
     finishedAt: past.finishedDaysAgo === null ? null : daysAgo(now, past.finishedDaysAgo),
   };
 }
@@ -72,7 +90,6 @@ function pastCycle(now: Date, past: PastCycle): Cycle {
 /** One cycle for each way of winning: votes, first choices and a draw. */
 const PAST_CYCLES: PastCycle[] = [
   {
-    id: 'c1',
     number: 1,
     winner: 'hora',
     method: 'votes',
@@ -81,7 +98,6 @@ const PAST_CYCLES: PastCycle[] = [
     finishedDaysAgo: 90,
   },
   {
-    id: 'c2',
     number: 2,
     winner: 'torto',
     method: 'first-choices',
@@ -90,7 +106,6 @@ const PAST_CYCLES: PastCycle[] = [
     finishedDaysAgo: 45,
   },
   {
-    id: 'c3',
     number: 3,
     winner: 'cem',
     method: 'draw',
@@ -102,9 +117,9 @@ const PAST_CYCLES: PastCycle[] = [
 
 function seedPastCycle(state: DemoState, now: Date, past: PastCycle) {
   const cycle = pastCycle(now, past);
-  state.cycles[past.id] = cycle;
-  state.nominations[past.id] = nominations(cycle.options as BookKey[]);
-  state.tallies[past.id] = cycle.results ?? undefined;
+  state.cycles[cycle.id] = cycle;
+  state.nominations[cycle.id] = nominations(cycle.options as BookKey[]);
+  state.tallies[cycle.id] = cycle.results ?? undefined;
 }
 
 export function createDemoState(
@@ -120,11 +135,14 @@ export function createDemoState(
     answers: {},
     tallies: {},
     receipts: {},
+    readers: {},
+    settings: { members: 0 },
   };
   DEMO_PERSONAS.filter((persona) => persona.uid !== OUTSIDER).forEach((persona) => {
     state.allowlist[persona.email] = { admin: persona.uid === DEMO_ADMIN };
     state.members[persona.uid] = { uid: persona.uid, name: persona.name, photoURL: null };
   });
+  state.settings.members = Object.keys(state.allowlist).length;
   PAST_CYCLES.forEach((past) => {
     seedPastCycle(state, now, past);
   });
@@ -135,5 +153,5 @@ export function createDemoState(
 /** Only the allowlist and members: for tests that build their own cycles. */
 export function createEmptyDemoState(): DemoState {
   const state = createDemoState();
-  return { ...state, cycles: {}, nominations: {}, answers: {}, tallies: {} };
+  return { ...state, cycles: {}, nominations: {}, answers: {}, tallies: {}, readers: {} };
 }

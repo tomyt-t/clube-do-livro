@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { countOf, formatDay, formatWeekday, peopleWho, RESPONDED, until } from './format';
+import {
+  countOf,
+  formatDay,
+  formatWeekday,
+  peopleOutOf,
+  peopleWho,
+  RESPONDED,
+  until,
+  VOTED,
+} from './format';
 
 const friday = new Date(2026, 10, 20, 12);
 
@@ -23,6 +32,13 @@ describe('format', () => {
     expect(peopleWho(0, RESPONDED)).toBe('Ninguém respondeu ainda.');
     expect(peopleWho(1, RESPONDED)).toBe('1 pessoa respondeu.');
     expect(peopleWho(3, RESPONDED)).toBe('3 pessoas responderam.');
+  });
+
+  it('counts out of the whole club, as in the prototype', () => {
+    expect(peopleOutOf(3, 6, RESPONDED)).toBe('3 de 6 responderam.');
+    expect(peopleOutOf(1, 6, VOTED)).toBe('1 de 6 votou.');
+    expect(peopleOutOf(0, 6, VOTED)).toBe('Ninguém votou ainda.');
+    expect(peopleOutOf(2, 0, VOTED)).toBe('2 pessoas votaram.');
   });
 
   it('pluralizes counts', () => {

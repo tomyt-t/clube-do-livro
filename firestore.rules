@@ -13,7 +13,11 @@ rules_version = '2';
 //   member to their choices.
 // * Admin writes follow a state machine and cannot touch the tally; the
 //   declared winner must follow the club's rule (most votes, then most first
-//   choices, then a draw among the books still tied).
+//   choices, then a draw among the books still tied). A draw is fixed by the
+//   time voting closed, so these rules recompute it.
+// * The cycle moves on by itself: any member may take the next step once
+//   everyone (settings/club.members) has answered, voted or finished the
+//   book. The organizer may take a step at any time.
 // * Everything not explicitly allowed is denied.
 //
 // Limits shared with src/domain: book fields (book.ts), two choices per
@@ -69,6 +73,25 @@ service cloud.firestore {
 
     function receiptPath(c) {
       return /databases/$(database)/documents/cycles/$(c)/receipts/$(request.auth.uid);
+    }
+
+    function readerPath(c) {
+      return /databases/$(database)/documents/cycles/$(c)/readers/$(request.auth.uid);
+    }
+
+    function settingsPath() {
+      return /databases/$(database)/documents/settings/club;
+    }
+
+    // Cycles are named by number, so a round can only ever be opened once.
+    function cycleIdFor(number) {
+      return 'ciclo-' + string(number);
+    }
+
+    // How many members "everyone" is. Missing settings stop the automatic
+    // flow (the read fails) until the organizer sets them.
+    function everyone(count) {
+      return count >= get(settingsPath()).data.members;
     }
 
     // ------------------------------------------------------------- validation
@@ -147,13 +170,28 @@ service cloud.firestore {
         && (request.resource.data.photoURL == null || isLink(request.resource.data.photoURL));
     }
 
+    // --------------------------------------------------------------- settings
+    // Only the member count, kept by the organizer in step with the allowlist.
+
+    match /settings/{docId} {
+      allow read: if isMember() && docId == 'club';
+      allow create, update: if isAdmin() && docId == 'club'
+        && hasExactly(request.resource.data, ['members'])
+        && request.resource.data.members is int
+        && request.resource.data.members >= 1
+        && request.resource.data.members <= 100;
+    }
+
     // ----------------------------------------------------------------- cycles
 
     match /cycles/{cycleId} {
       allow read: if isMember();
-      allow create: if isAdmin() && isNewCycle(request.resource.data);
+      allow create: if (isAdmin() && isNewCycle(cycleId, request.resource.data))
+        || (isMember() && isNextRound(cycleId, request.resource.data));
       allow update: if (isMember() && countsOwnAnswer(cycleId))
         || (isMember() && countsOwnBallot(cycleId))
+        || (isMember() && countsOwnFinish(cycleId))
+        || (isMember() && isFlowStep(cycleId, resource.data, request.resource.data))
         || (isAdmin() && isValidTransition(cycleId, resource.data, request.resource.data));
       // A cycle can be dropped only before any vote exists.
       allow delete: if isAdmin() && resource.data.status == 'nominating';
@@ -187,8 +225,17 @@ service cloud.firestore {
       match /tally/{docId} {
         allow get: if isMember() && docId == 'counts'
           && !(get(cyclePath(cycleId)).data.status in ['nominating', 'voting']);
-        allow create: if isAdmin() && docId == 'counts' && isNewTally(cycleId);
+        allow create: if isMember() && docId == 'counts' && isNewTally(cycleId);
         allow update: if isMember() && docId == 'counts' && isValidVote(cycleId);
+      }
+
+      // ---------------------------------------------------------- readers
+      // "Acabei de ler!": the mark says *that* a member finished; the cycle
+      // only counts how many.
+
+      match /readers/{uid} {
+        allow get: if isMember() && isSelf(uid);
+        allow create: if isMember() && isSelf(uid) && isNewReaderMark(cycleId);
       }
     }
 
@@ -204,10 +251,15 @@ service cloud.firestore {
       return !exists(answerPath(c)) && existsAfter(answerPath(c));
     }
 
+    // A nomination also joins the cycle's list, in arrival order.
     function countsOwnAnswer(c) {
+      let nominated = getAfter(answerPath(c)).data.nominationId;
+      let before = resource.data.nominationIds;
       return resource.data.status == 'nominating'
-        && changesOnly(['responses'])
+        && changesOnly(['responses', 'nominationIds'])
         && request.resource.data.responses == resource.data.responses + 1
+        && request.resource.data.nominationIds
+          == (nominated == null ? before : before.concat([nominated]))
         && isAnsweringNow(c);
     }
 
@@ -303,15 +355,69 @@ service cloud.firestore {
         && isVotingNow(c);
     }
 
+    // -------------------------------------------------------- reader writes
+    // Batch: readers/{uid} (empty) + cycles/{id}.finishedReaders (+1)
+
+    function isFinishingNow(c) {
+      return !exists(readerPath(c)) && existsAfter(readerPath(c));
+    }
+
+    function isNewReaderMark(c) {
+      return request.resource.data.keys().size() == 0
+        && get(cyclePath(c)).data.status == 'reading'
+        && getAfter(cyclePath(c)).data.finishedReaders
+          == get(cyclePath(c)).data.finishedReaders + 1;
+    }
+
+    function countsOwnFinish(c) {
+      return resource.data.status == 'reading'
+        && changesOnly(['finishedReaders'])
+        && request.resource.data.finishedReaders == resource.data.finishedReaders + 1
+        && isFinishingNow(c);
+    }
+
+    // ------------------------------------------------------------- flow steps
+    // Any member, once everyone has done their part.
+
+    function isFlowStep(c, before, after) {
+      return (startsVoting(c, before, after)
+          && everyone(before.responses)
+          && after.options == before.nominationIds)
+        || (closesVoting(before, after)
+          && (everyone(before.ballots) || before.options.size() == 1))
+        || declaresWinner(c, before, after)
+        || finishesForEveryone(before, after);
+    }
+
+    // Ending the book always opens the next round, in the same batch.
+    function finishesForEveryone(before, after) {
+      let next = cyclePath(cycleIdFor(before.number + 1));
+      return finishesReading(before, after)
+        && everyone(before.finishedReaders)
+        && !exists(next) && existsAfter(next);
+    }
+
+    // The next round, created together with ending the book before it.
+    function isNextRound(id, cycle) {
+      let previous = cyclePath(cycleIdFor(cycle.number - 1));
+      return isNewCycle(id, cycle)
+        && cycle.nominationDeadline == null
+        && get(previous).data.status == 'reading'
+        && getAfter(previous).data.status == 'finished';
+    }
+
     // ------------------------------------------------------------- admin: cycles
 
-    function isNewCycle(cycle) {
-      return hasExactly(cycle, ['number', 'status', 'responses', 'nominationDeadline',
-                                'votingDeadline', 'createdAt', 'options', 'ballots',
-                                'votingOpenedAt', 'votingClosedAt', 'results', 'winner',
-                                'readingStartedAt', 'finishedAt'])
+    function isNewCycle(id, cycle) {
+      return hasExactly(cycle, ['number', 'status', 'responses', 'nominationIds',
+                                'nominationDeadline', 'votingDeadline', 'createdAt',
+                                'options', 'ballots', 'votingOpenedAt', 'votingClosedAt',
+                                'results', 'winner', 'readingStartedAt', 'finishedReaders',
+                                'finishedAt'])
         && cycle.number is int && cycle.number >= 1
+        && id == cycleIdFor(cycle.number)
         && cycle.status == 'nominating' && cycle.responses == 0
+        && cycle.nominationIds == [] && cycle.finishedReaders == 0
         && isOptionalTime(cycle.nominationDeadline) && cycle.votingDeadline == null
         && cycle.createdAt == request.time
         && cycle.options == [] && cycle.ballots == 0
@@ -389,17 +495,73 @@ service cloud.firestore {
         && beatsSlot(o, r, w, m, 27) && beatsSlot(o, r, w, m, 28) && beatsSlot(o, r, w, m, 29);
     }
 
+    // Draw list, element i: an option tied with the winner on votes and
+    // first choices, and after the one before it (strictly ascending ids).
+    function isTieAt(o, r, d, w, i) {
+      return i >= d.size()
+        || (d[i] in o && r.votes[d[i]] == r.votes[w] && r.firsts[d[i]] == r.firsts[w]
+          && (i == 0 || d[i - 1] < d[i]));
+    }
+
+    // Option i, if tied with the winner, must be in the draw list.
+    function isListedAt(o, r, d, w, i) {
+      return i >= o.size()
+        || !(r.votes[o[i]] == r.votes[w] && r.firsts[o[i]] == r.firsts[w])
+        || o[i] in d;
+    }
+
+    function isTieList(o, r, d, w) {
+      return isTieAt(o, r, d, w, 0) && isTieAt(o, r, d, w, 1) && isTieAt(o, r, d, w, 2)
+        && isTieAt(o, r, d, w, 3) && isTieAt(o, r, d, w, 4) && isTieAt(o, r, d, w, 5)
+        && isTieAt(o, r, d, w, 6) && isTieAt(o, r, d, w, 7) && isTieAt(o, r, d, w, 8)
+        && isTieAt(o, r, d, w, 9) && isTieAt(o, r, d, w, 10) && isTieAt(o, r, d, w, 11)
+        && isTieAt(o, r, d, w, 12) && isTieAt(o, r, d, w, 13) && isTieAt(o, r, d, w, 14)
+        && isTieAt(o, r, d, w, 15) && isTieAt(o, r, d, w, 16) && isTieAt(o, r, d, w, 17)
+        && isTieAt(o, r, d, w, 18) && isTieAt(o, r, d, w, 19) && isTieAt(o, r, d, w, 20)
+        && isTieAt(o, r, d, w, 21) && isTieAt(o, r, d, w, 22) && isTieAt(o, r, d, w, 23)
+        && isTieAt(o, r, d, w, 24) && isTieAt(o, r, d, w, 25) && isTieAt(o, r, d, w, 26)
+        && isTieAt(o, r, d, w, 27) && isTieAt(o, r, d, w, 28) && isTieAt(o, r, d, w, 29);
+    }
+
+    function listsEveryTie(o, r, d, w) {
+      return isListedAt(o, r, d, w, 0) && isListedAt(o, r, d, w, 1) && isListedAt(o, r, d, w, 2)
+        && isListedAt(o, r, d, w, 3) && isListedAt(o, r, d, w, 4) && isListedAt(o, r, d, w, 5)
+        && isListedAt(o, r, d, w, 6) && isListedAt(o, r, d, w, 7) && isListedAt(o, r, d, w, 8)
+        && isListedAt(o, r, d, w, 9) && isListedAt(o, r, d, w, 10) && isListedAt(o, r, d, w, 11)
+        && isListedAt(o, r, d, w, 12) && isListedAt(o, r, d, w, 13)
+        && isListedAt(o, r, d, w, 14) && isListedAt(o, r, d, w, 15)
+        && isListedAt(o, r, d, w, 16) && isListedAt(o, r, d, w, 17)
+        && isListedAt(o, r, d, w, 18) && isListedAt(o, r, d, w, 19)
+        && isListedAt(o, r, d, w, 20) && isListedAt(o, r, d, w, 21)
+        && isListedAt(o, r, d, w, 22) && isListedAt(o, r, d, w, 23)
+        && isListedAt(o, r, d, w, 24) && isListedAt(o, r, d, w, 25)
+        && isListedAt(o, r, d, w, 26) && isListedAt(o, r, d, w, 27)
+        && isListedAt(o, r, d, w, 28) && isListedAt(o, r, d, w, 29);
+    }
+
+    // The tied books, in a fixed order; the winner is the one at the
+    // closing time's milliseconds modulo their count. Nobody picks it.
+    function isFairDraw(o, r, winner, closedAt) {
+      let d = winner.drawnFrom;
+      let w = winner.nominationId;
+      return d is list && d.size() >= 2 && d.size() <= 30
+        && isTieList(o, r, d, w) && listsEveryTie(o, r, d, w)
+        && d[closedAt.toMillis() % d.size()] == w;
+    }
+
     // The method must be the step that actually decided: a clear leader on
     // votes cannot be labeled a first-choice or a draw win, and so on.
-    function isEarnedWin(options, results, winner) {
+    function isEarnedWin(options, results, winner, closedAt) {
       let w = winner.nominationId;
       let m = winner.method;
-      return (m == 'unopposed' && options.size() == 1)
-        || (m == 'votes' && options.size() > 1 && leads(options, results, w, 0))
-        || (m == 'first-choices' && leads(options, results, w, 1)
-          && !leads(options, results, w, 0))
+      return (m != 'draw' && winner.drawnFrom == []
+          && ((m == 'unopposed' && options.size() == 1)
+            || (m == 'votes' && options.size() > 1 && leads(options, results, w, 0))
+            || (m == 'first-choices' && leads(options, results, w, 1)
+              && !leads(options, results, w, 0))))
         || (m == 'draw' && leads(options, results, w, 2)
-          && !leads(options, results, w, 1));
+          && !leads(options, results, w, 1)
+          && isFairDraw(options, results, winner, closedAt));
     }
 
     // Results must be the tally itself; the winner must follow the rule.
@@ -411,11 +573,11 @@ service cloud.firestore {
           || (after.status == 'upcoming' && after.readingStartedAt == null))
         && after.results == get(tallyPath(c)).data
         && winner is map
-        && hasExactly(winner, ['nominationId', 'book', 'method', 'decidedAt'])
+        && hasExactly(winner, ['nominationId', 'book', 'method', 'decidedAt', 'drawnFrom'])
         && winner.decidedAt == request.time
         && winner.nominationId in before.options
         && winner.book == get(nominationPath(c, winner.nominationId)).data.book
-        && isEarnedWin(before.options, after.results, winner);
+        && isEarnedWin(before.options, after.results, winner, before.votingClosedAt);
     }
 
     function startsReading(before, after) {

@@ -29,6 +29,12 @@ export function requireMember(context: DemoContext): DemoPersona {
   return persona;
 }
 
+/** Whether the signed-in persona organizes the club, without failing. */
+export function isAdmin(context: DemoContext): boolean {
+  const persona = personaByUid(context, context.store.current.session);
+  return persona !== null && context.store.current.allowlist[persona.email]?.admin === true;
+}
+
 /** Mirrors `isAdmin()`. */
 export function requireAdmin(context: DemoContext): DemoPersona {
   const persona = requireMember(context);

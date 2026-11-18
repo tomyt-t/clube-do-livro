@@ -47,6 +47,8 @@ export interface Winner {
   book: Book;
   method: DecisionMethod;
   decidedAt: Date;
+  /** For a draw: the tied books in draw order, so anyone can check it. */
+  drawnFrom: NominationId[];
 }
 
 /** Counts per nomination. */
@@ -66,6 +68,11 @@ export interface Cycle {
   status: CycleStatus;
   /** Members who answered the nomination call, whether they nominated or not. */
   responses: number;
+  /**
+   * The nominations so far, in the order they arrived (never who sent them).
+   * The vote opens with exactly these, so the server can check the ballot.
+   */
+  nominationIds: NominationId[];
   nominationDeadline: Date | null;
   votingDeadline: Date | null;
   createdAt: Date;
@@ -78,7 +85,15 @@ export interface Cycle {
   results: VoteResults | null;
   winner: Winner | null;
   readingStartedAt: Date | null;
+  /** Members who marked "Acabei de ler!"; never who. */
+  finishedReaders: number;
   finishedAt: Date | null;
+}
+
+/** Club-wide settings everyone can read; only the organizer changes them. */
+export interface ClubSettings {
+  /** How many people are on the allowlist: "everyone" in the cycle's flow. */
+  members: number;
 }
 
 /** A nominated book. Who nominated it is never part of this record. */

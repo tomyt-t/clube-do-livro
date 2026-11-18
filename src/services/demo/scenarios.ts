@@ -1,3 +1,4 @@
+import { cycleIdFor } from '@/domain/flow';
 import { addBallot, emptyResults } from '@/domain/tally';
 import type { Cycle, Nomination } from '@/domain/types';
 
@@ -8,12 +9,16 @@ import type { DemoState } from './state';
  * Where the demo's current cycle (number 4) stands, so each screen of the
  * election can be tried without the organizer's controls.
  */
-export type DemoScenario = 'nominating' | 'voting';
+export type DemoScenario = 'nominating' | 'voting' | 'reading';
 
 export const DEMO_SCENARIOS: readonly { id: DemoScenario; label: string }[] = [
   { id: 'nominating', label: 'Indicações' },
   { id: 'voting', label: 'Votação' },
+  { id: 'reading', label: 'Lendo' },
 ];
+
+const READING = cycleIdFor(3);
+const CURRENT = cycleIdFor(4);
 
 export type BookKey = keyof typeof DEMO_BOOKS;
 
@@ -29,10 +34,11 @@ export function nominations(keys: readonly BookKey[]): Nomination[] {
 
 function currentCycle(now: Date, changes: Partial<Cycle>): Cycle {
   return {
-    id: 'c4',
+    id: CURRENT,
     number: 4,
     status: 'nominating',
     responses: 0,
+    nominationIds: [],
     nominationDeadline: null,
     votingDeadline: null,
     createdAt: daysAgo(now, 4),
@@ -43,6 +49,7 @@ function currentCycle(now: Date, changes: Partial<Cycle>): Cycle {
     results: null,
     winner: null,
     readingStartedAt: null,
+    finishedReaders: 0,
     finishedAt: null,
     ...changes,
   };
@@ -50,12 +57,9 @@ function currentCycle(now: Date, changes: Partial<Cycle>): Cycle {
 
 /** Three members answered; Marina has not. */
 function seedNominating(state: DemoState, now: Date) {
-  state.cycles.c4 = currentCycle(now, {
-    responses: 3,
-    nominationDeadline: new Date(now.getTime() + 3 * DAY),
-  });
-  state.nominations.c4 = nominations(['ensaio', 'bras']);
-  state.answers.c4 = {
+  state.cycles[CURRENT] = currentCycle(now, { responses: 3, nominationIds: ['ensaio', 'bras'] });
+  state.nominations[CURRENT] = nominations(['ensaio', 'bras']);
+  state.answers[CURRENT] = {
     rafa: { kind: 'nominated', nominationId: 'ensaio' },
     julia: { kind: 'nominated', nominationId: 'bras' },
     teo: { kind: 'passed' },
@@ -66,16 +70,16 @@ const VOTING_OPTIONS: BookKey[] = ['ensaio', 'bras', 'dom', 'vidas', 'quarto'];
 
 /** Five nominations; Téo and Bruno already voted, Marina (who passed) has not. */
 function seedVoting(state: DemoState, now: Date) {
-  state.cycles.c4 = currentCycle(now, {
+  state.cycles[CURRENT] = currentCycle(now, {
     status: 'voting',
     responses: 6,
+    nominationIds: VOTING_OPTIONS,
     options: VOTING_OPTIONS,
     ballots: 2,
     votingOpenedAt: daysAgo(now, 1),
-    votingDeadline: new Date(now.getTime() + 2 * DAY),
   });
-  state.nominations.c4 = nominations(VOTING_OPTIONS);
-  state.answers.c4 = {
+  state.nominations[CURRENT] = nominations(VOTING_OPTIONS);
+  state.answers[CURRENT] = {
     rafa: { kind: 'nominated', nominationId: 'ensaio' },
     julia: { kind: 'nominated', nominationId: 'bras' },
     teo: { kind: 'nominated', nominationId: 'dom' },
@@ -84,11 +88,23 @@ function seedVoting(state: DemoState, now: Date) {
     marina: { kind: 'passed' },
   };
   const opened = emptyResults(VOTING_OPTIONS);
-  state.tallies.c4 = addBallot(addBallot(opened, ['bras', 'ensaio']), ['quarto', 'dom']);
-  state.receipts.c4 = ['teo', 'bruno'];
+  state.tallies[CURRENT] = addBallot(addBallot(opened, ['bras', 'ensaio']), ['quarto', 'dom']);
+  state.receipts[CURRENT] = ['teo', 'bruno'];
+}
+
+/** No election yet: everyone but Marina finished the book, so her mark opens round 4. */
+function seedReading(state: DemoState) {
+  const readers = ['rafa', 'julia', 'teo', 'bruno', 'lia'];
+  state.readers[READING] = readers;
+  const reading = state.cycles[READING];
+  if (reading) reading.finishedReaders = readers.length;
 }
 
 export function seedCurrentCycle(state: DemoState, now: Date, scenario: DemoScenario) {
   if (scenario === 'voting') seedVoting(state, now);
+  else if (scenario === 'reading') seedReading(state);
   else seedNominating(state, now);
+  if (scenario !== 'reading') state.readers[READING] = ['teo', 'lia'];
+  const reading = state.cycles[READING];
+  if (reading && scenario !== 'reading') reading.finishedReaders = 2;
 }

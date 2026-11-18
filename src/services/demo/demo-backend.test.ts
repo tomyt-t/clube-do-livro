@@ -93,7 +93,7 @@ describe('demo ballots', () => {
     const rafa = `${await answerAs(backend, cycleId, 'rafa')}`;
     const julia = `${await answerAs(backend, cycleId, 'julia')}`;
     const teo = `${await answerAs(backend, cycleId, 'teo')}`;
-    await backend.admin.startVoting({ cycleId, options: [rafa, julia, teo], votingDeadline: null });
+    await backend.flow.startVoting({ cycleId, options: [rafa, julia, teo], votingDeadline: null });
     return { backend, cycleId, rafa, julia, teo };
   }
 
@@ -123,9 +123,9 @@ describe('demo ballots', () => {
     const { backend, cycleId, rafa, julia, teo } = await votingCycle();
     await voteAs(backend, { cycleId, uid: 'lia', choices: [teo, rafa] });
     await voteAs(backend, { cycleId, uid: 'bruno', choices: [julia, teo] });
-    await backend.admin.closeVoting(cycleId);
+    await backend.flow.closeVoting(cycleId);
 
-    expect(await backend.admin.readResults(cycleId)).toEqual({
+    expect(await backend.flow.readResults(cycleId)).toEqual({
       votes: { [rafa]: 1, [julia]: 1, [teo]: 2 },
       firsts: { [rafa]: 0, [julia]: 1, [teo]: 1 },
     });
@@ -133,12 +133,12 @@ describe('demo ballots', () => {
 
   it('keeps the tally sealed until voting closes', async () => {
     const { backend, cycleId } = await votingCycle();
-    await expect(backend.admin.readResults(cycleId)).rejects.toMatchObject(denied);
+    await expect(backend.flow.readResults(cycleId)).rejects.toMatchObject(denied);
   });
 
   it('stops accepting ballots once voting closes', async () => {
     const { backend, cycleId, julia, teo } = await votingCycle();
-    await backend.admin.closeVoting(cycleId);
+    await backend.flow.closeVoting(cycleId);
     await expect(
       voteAs(backend, { cycleId, uid: 'lia', choices: [julia, teo] }),
     ).rejects.toMatchObject(denied);

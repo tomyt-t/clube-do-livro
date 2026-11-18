@@ -4,9 +4,9 @@ import { PATHS } from '@/app/paths';
 import { splitTitle } from '@/domain/book';
 import type { Cycle } from '@/domain/types';
 import { useMember } from '@/features/auth/session';
-import { useHasVoted, useOwnAnswer } from '@/features/club/use-club';
+import { useHasVoted, useMemberCount, useOwnAnswer } from '@/features/club/use-club';
 import { LinkButton } from '@/ui/Button';
-import { peopleWho, RESPONDED, until, VOTED } from '@/ui/format';
+import { peopleOutOf, RESPONDED, until, VOTED } from '@/ui/format';
 
 import { nextReadingOf, type NextReading } from './next-reading';
 import styles from './NextReadingSection.module.css';
@@ -41,12 +41,13 @@ function ElectionLink({ done, label }: { done: boolean; label: string }) {
 function Nominating({ cycle, closed }: { cycle: Cycle; closed: boolean }) {
   const { user } = useMember();
   const answer = useOwnAnswer(cycle.id, user.uid);
+  const members = useMemberCount();
   if (closed) {
     return <Line headline="Indicações encerradas" details={['A votação abre em breve.']} />;
   }
 
   const answered = answer.status === 'ready' && answer.value !== null;
-  const responses = peopleWho(cycle.responses, RESPONDED);
+  const responses = peopleOutOf(cycle.responses, members, RESPONDED);
   return (
     <Line
       headline="Indicações abertas"
@@ -59,12 +60,13 @@ function Nominating({ cycle, closed }: { cycle: Cycle; closed: boolean }) {
 function Voting({ cycle, closed }: { cycle: Cycle; closed: boolean }) {
   const { user } = useMember();
   const voted = useHasVoted(cycle.id, user.uid);
+  const members = useMemberCount();
   if (closed) {
     return <Line headline="Votação encerrada" details={['O resultado sai em breve.']} />;
   }
 
   const done = voted.status === 'ready' && voted.value;
-  const ballots = peopleWho(cycle.ballots, VOTED);
+  const ballots = peopleOutOf(cycle.ballots, members, VOTED);
   return (
     <Line
       headline="Votação aberta"
@@ -93,7 +95,7 @@ function NextReadingLine({ next }: { next: NextReading }) {
       return (
         <Line
           headline="Nenhuma votação aberta"
-          details={['Quem organiza o clube abre as indicações da próxima leitura.']}
+          details={['As indicações abrem quando todos terminarem a leitura atual.']}
         />
       );
   }

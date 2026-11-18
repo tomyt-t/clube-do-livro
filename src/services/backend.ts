@@ -1,5 +1,6 @@
 import type {
   Book,
+  ClubSettings,
   Cycle,
   CycleId,
   DecisionMethod,
@@ -97,14 +98,14 @@ export interface ClubPort {
   answerNominationCall(input: AnswerInput): Promise<NominationId | null>;
   /** Final and anonymous: a member votes once per cycle. */
   castBallot(input: BallotInput): Promise<void>;
+  /** The member count that "everyone" refers to; zero until the organizer sets it. */
+  watchSettings(subscriber: Subscriber<ClubSettings>): Unsubscribe;
+  watchHasFinished(cycleId: CycleId, uid: MemberId, subscriber: Subscriber<boolean>): Unsubscribe;
+  /** "Acabei de ler!": final, and counted without saying who. */
+  markFinished(input: { cycleId: CycleId; uid: MemberId }): Promise<void>;
 }
 
-// ------------------------------------------------------------------ admin
-
-export interface OpenCycleInput {
-  number: number;
-  nominationDeadline: Date | null;
-}
+// ------------------------------------------------------------------- flow
 
 export interface StartVotingInput {
   cycleId: CycleId;
@@ -117,9 +118,33 @@ export interface DeclareWinnerInput {
   nominationId: NominationId;
   book: Book;
   method: DecisionMethod;
+  /** For a draw: the tied books in draw order; empty otherwise. */
+  drawnFrom: readonly NominationId[];
   /** The tally exactly as read, kept on the cycle for history. */
   results: VoteResults;
   startReading: boolean;
+}
+
+/**
+ * The steps that move a cycle along. Any member may take one once everyone
+ * has done their part; the organizer may take one at any time.
+ */
+export interface FlowPort {
+  /** Fixes the ballot's options and opens an empty tally. */
+  startVoting(input: StartVotingInput): Promise<void>;
+  closeVoting(cycleId: CycleId): Promise<void>;
+  /** Reads the tally, readable only once voting has closed. */
+  readResults(cycleId: CycleId): Promise<VoteResults>;
+  declareWinner(input: DeclareWinnerInput): Promise<void>;
+  /** Ends the book everyone finished and opens the next round, in one step. */
+  finishAndOpenNext(input: { cycleId: CycleId; nextNumber: number }): Promise<CycleId>;
+}
+
+// ------------------------------------------------------------------ admin
+
+export interface OpenCycleInput {
+  number: number;
+  nominationDeadline: Date | null;
 }
 
 export type DeadlineField = 'nominationDeadline' | 'votingDeadline';
@@ -133,23 +158,20 @@ export interface AdminPort {
   openCycle(input: OpenCycleInput): Promise<CycleId>;
   setDeadline(cycleId: CycleId, field: DeadlineField, deadline: Date | null): Promise<void>;
   deleteCycle(cycleId: CycleId): Promise<void>;
-  /** Fixes the ballot's options and opens an empty tally. */
-  startVoting(input: StartVotingInput): Promise<void>;
-  closeVoting(cycleId: CycleId): Promise<void>;
-  /** Reads the tally, readable only once voting has closed. */
-  readResults(cycleId: CycleId): Promise<VoteResults>;
-  declareWinner(input: DeclareWinnerInput): Promise<void>;
   startReading(cycleId: CycleId): Promise<void>;
   finishReading(cycleId: CycleId): Promise<void>;
   watchAllowlist(subscriber: Subscriber<AllowlistEntry[]>): Unsubscribe;
   /** Emails must already be normalized (trimmed, lowercase). */
   allowEmails(emails: readonly string[]): Promise<void>;
   revokeEmail(email: string): Promise<void>;
+  /** Keeps "everyone" in step with the allowlist. */
+  setMemberCount(members: number): Promise<void>;
 }
 
 export interface Backend {
   kind: 'firebase' | 'demo';
   auth: AuthPort;
   club: ClubPort;
+  flow: FlowPort;
   admin: AdminPort;
 }

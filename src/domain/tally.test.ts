@@ -49,34 +49,38 @@ describe('finalists', () => {
 describe('decide', () => {
   it('gives it to the most votes, whatever the first choices say', () => {
     // 2 first + 8 second (10 votes) beats 7 first + 2 second (9 votes).
-    const decision = decide(['a', 'b'], results({ a: 10, b: 9 }, { a: 2, b: 7 }));
+    const decision = decide(['a', 'b'], results({ a: 10, b: 9 }, { a: 2, b: 7 }), 0);
     expect(decision).toEqual({ nominationId: 'a', method: 'votes', drawnFrom: [] });
   });
 
   it('breaks a tie by first choices', () => {
-    const decision = decide(['a', 'b', 'c'], results({ a: 5, b: 5, c: 5 }, { a: 1, b: 3, c: 1 }));
+    const decision = decide(
+      ['a', 'b', 'c'],
+      results({ a: 5, b: 5, c: 5 }, { a: 1, b: 3, c: 1 }),
+      0,
+    );
     expect(decision).toEqual({ nominationId: 'b', method: 'first-choices', drawnFrom: [] });
   });
 
-  it('draws among the books still tied after first choices', () => {
+  it('draws among the books still tied, by the closing time', () => {
     const tied = results({ a: 5, b: 5, c: 5 }, { a: 2, b: 2, c: 1 });
-    expect(decide(['a', 'b', 'c'], tied, () => 0)).toEqual({
+    expect(decide(['c', 'b', 'a'], tied, 1_000)).toEqual({
       nominationId: 'a',
       method: 'draw',
       drawnFrom: ['a', 'b'],
     });
-    expect(decide(['a', 'b', 'c'], tied, () => 0.99).nominationId).toBe('b');
+    expect(decide(['c', 'b', 'a'], tied, 1_001).nominationId).toBe('b');
   });
 
   it('treats a single nomination as unopposed', () => {
-    expect(decide(['a'], emptyResults(['a'])).method).toBe('unopposed');
+    expect(decide(['a'], emptyResults(['a']), 0).method).toBe('unopposed');
   });
 
   it('draws among everyone when nobody voted', () => {
-    expect(decide(['a', 'b'], emptyResults(['a', 'b']), () => 0).method).toBe('draw');
+    expect(decide(['a', 'b'], emptyResults(['a', 'b']), 0).method).toBe('draw');
   });
 
   it('refuses to decide without options', () => {
-    expect(() => decide([], emptyResults([]))).toThrow();
+    expect(() => decide([], emptyResults([]), 0)).toThrow();
   });
 });

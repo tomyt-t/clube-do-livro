@@ -1,16 +1,16 @@
 import { assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, type Timestamp } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 
 import { decide } from '@/domain/tally';
 import type { Book, NominationId } from '@/domain/types';
+import { openCycle } from '@/services/firebase/admin-writes';
 import {
   closeVoting,
   declareWinner,
-  openCycle,
   readResults,
   startVoting,
-} from '@/services/firebase/admin-writes';
+} from '@/services/firebase/flow-writes';
 import { answerNominationCall, castBallot } from '@/services/firebase/member-writes';
 import { makeBook } from '@/test/factories';
 
@@ -72,7 +72,9 @@ it('runs a full cycle from nominations to the winner', async () => {
     firsts: { [fromAna]: 1, [fromBia]: 2, [fromAdmin]: 1 },
   });
 
-  const decision = decide(options, results);
+  const closed = await getDoc(doc(adminDb, 'cycles', cycleId));
+  const closedAt = closed.get('votingClosedAt') as Timestamp;
+  const decision = decide(options, results, closedAt.toMillis());
   expect(decision).toEqual({ nominationId: fromBia, method: 'first-choices', drawnFrom: [] });
 
   const nomination = await getDoc(doc(adminDb, 'cycles', cycleId, 'nominations', fromBia));
@@ -82,6 +84,7 @@ it('runs a full cycle from nominations to the winner', async () => {
       nominationId: fromBia,
       book: nomination.get('book') as Book,
       method: decision.method,
+      drawnFrom: decision.drawnFrom,
       results,
       startReading: true,
     }),

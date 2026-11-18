@@ -1,9 +1,9 @@
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import type { Cycle } from '@/domain/types';
-import { openNominations, startVoting } from '@/services/election';
-import { answerAs, electionContext, emptyClub, firstValue, voteAs } from '@/test/backend';
+import { createDemoBackend, createDemoState } from '@/services/demo';
+import { openNominations } from '@/services/election';
+import { MEMBERS, answerAs, emptyClub, settle, soloRound, voteAs } from '@/test/backend';
 import { makeBook } from '@/test/factories';
 import { renderAsMember } from '@/test/render';
 
@@ -37,10 +37,8 @@ describe('ReadingPage', () => {
 
   it('folds a long synopsis and credits where it came from', async () => {
     const backend = emptyClub();
-    const cycleId = await openNominations(backend.admin, [], null);
     const synopsis = `${'Uma frase da sinopse. '.repeat(30)}Fim.`;
-    await answerAs(backend, cycleId, 'rafa', makeBook({ synopsis, synopsisSource: 'wikipedia' }));
-    await startVoting(backend.admin, await electionContext(backend, cycleId), null);
+    await soloRound(backend, makeBook({ synopsis, synopsisSource: 'wikipedia' }));
 
     const { user } = renderAsMember(<ReadingPage />, 'marina', { backend });
     const more = await screen.findByRole('button', { name: 'Ler mais' });
@@ -56,9 +54,7 @@ describe('ReadingPage', () => {
 
   it('offers the link as a button when there is no synopsis text', async () => {
     const backend = emptyClub();
-    const cycleId = await openNominations(backend.admin, [], null);
-    await answerAs(backend, cycleId, 'rafa', makeBook({ synopsis: null }));
-    await startVoting(backend.admin, await electionContext(backend, cycleId), null);
+    await soloRound(backend, makeBook({ synopsis: null }));
 
     renderAsMember(<ReadingPage />, 'marina', { backend });
     expect(await screen.findByRole('link', { name: /Ler sinopse/ })).toHaveAttribute(
@@ -72,7 +68,7 @@ describe('ReadingPage', () => {
     const next = await nextSection();
 
     expect(next.getByText('Indicações abertas')).toBeInTheDocument();
-    expect(next.getByText(/3 pessoas responderam\./)).toBeInTheDocument();
+    expect(await next.findByText(/3 de 6 responderam\./)).toBeInTheDocument();
     expect(await next.findByRole('link', { name: 'Indicar' })).toHaveAttribute('href', '/votacao');
   });
 
@@ -90,7 +86,9 @@ describe('ReadingPage', () => {
     const cycleId = await openNominations(backend.admin, [], null);
     const rafa = `${await answerAs(backend, cycleId, 'rafa')}`;
     const julia = `${await answerAs(backend, cycleId, 'julia')}`;
-    await startVoting(backend.admin, await electionContext(backend, cycleId), null);
+    for (const uid of ['marina', 'teo', 'bruno', 'lia'])
+      await answerAs(backend, cycleId, uid, null);
+    await settle(backend);
     await voteAs(backend, { cycleId, uid: 'lia', choices: [rafa, julia] });
 
     renderAsMember(<ReadingPage />, 'lia', { backend });
@@ -100,25 +98,20 @@ describe('ReadingPage', () => {
       await screen.findByRole('heading', { name: 'Nenhuma leitura em andamento' }),
     ).toBeInTheDocument();
     expect(next.getByText('Votação aberta')).toBeInTheDocument();
-    expect(await next.findByText('1 pessoa votou. Você já votou.')).toBeInTheDocument();
+    expect(await next.findByText('1 de 6 votou. Você já votou.')).toBeInTheDocument();
   });
 
   it('shows the book already chosen to come next', async () => {
     const backend = emptyClub();
-    const first = await openNominations(backend.admin, [], null);
-    await answerAs(backend, first, 'rafa');
-    await startVoting(backend.admin, await electionContext(backend, first), null);
-    const cycles = await firstValue<Cycle[]>((s) => backend.club.watchCycles(s));
-    const second = await openNominations(backend.admin, cycles, null);
-    await answerAs(backend, second, 'julia');
-    await startVoting(backend.admin, await electionContext(backend, second), null);
+    await soloRound(backend, makeBook({ title: 'Livro de rafa' }));
+    await soloRound(backend, makeBook({ title: 'Livro seguinte' }));
 
     renderAsMember(<ReadingPage />, 'marina', { backend });
     const next = await nextSection();
 
     expect(await screen.findByRole('heading', { name: 'Livro de rafa' })).toBeInTheDocument();
     expect(screen.getByText('sem disputa')).toBeInTheDocument();
-    expect(next.getByText('Livro de julia')).toBeInTheDocument();
+    expect(next.getByText('Livro seguinte')).toBeInTheDocument();
     expect(next.getByText(/Começa quando a leitura atual terminar/)).toBeInTheDocument();
   });
 
@@ -129,5 +122,38 @@ describe('ReadingPage', () => {
       await screen.findByRole('heading', { name: 'Nenhuma leitura em andamento' }),
     ).toBeInTheDocument();
     expect((await nextSection()).getByText('Nenhuma votação aberta')).toBeInTheDocument();
+  });
+});
+
+describe('Acabei de ler!', () => {
+  const readingClub = () => createDemoBackend({ state: createDemoState(new Date(), 'reading') });
+
+  it('asks before marking, then counts the reader without naming anyone', async () => {
+    const { user } = renderAsMember(<ReadingPage />, 'marina', { backend: readingClub() });
+
+    expect(await screen.findByText('5 de 6 terminaram.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Acabei de ler!' }));
+    const dialog = screen.getByRole('dialog', { name: 'Terminou a leitura?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Acabei de ler!' }));
+
+    expect(await screen.findByText('Você terminou de ler.')).toBeInTheDocument();
+    expect(screen.getByText('6 de 6 terminaram.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Acabei de ler!' })).not.toBeInTheDocument();
+  });
+
+  it('remembers who already finished', async () => {
+    renderAsMember(<ReadingPage />, 'rafa', { backend: readingClub() });
+    expect(await screen.findByText('Você terminou de ler.')).toBeInTheDocument();
+  });
+
+  it('only shows up for the book being read', async () => {
+    const backend = emptyClub();
+    await soloRound(backend);
+    await soloRound(backend, makeBook({ title: 'Livro seguinte' }));
+    renderAsMember(<ReadingPage />, 'marina', { backend });
+
+    expect(await screen.findByRole('button', { name: 'Acabei de ler!' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Acabei de ler!' })).toHaveLength(1);
+    expect(MEMBERS).toHaveLength(6);
   });
 });

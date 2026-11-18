@@ -1,9 +1,10 @@
-import { emptyResults } from '@/domain/tally';
-import type { Cycle, CycleId, CycleStatus, VoteResults } from '@/domain/types';
+import { cycleIdFor } from '@/domain/flow';
+import type { Cycle, CycleId, CycleStatus } from '@/domain/types';
 
 import type { AdminPort } from '../backend';
 
 import { deny, pause, requireAdmin, type DemoContext } from './context';
+import { newDemoCycle } from './cycles';
 import type { DemoState } from './state';
 
 type AsAdmin = (change: (state: DemoState) => void) => Promise<void>;
@@ -14,32 +15,13 @@ function cycleIn(state: DemoState, cycleId: CycleId, allowed: CycleStatus[]): Cy
   return cycle;
 }
 
-function newCycle(id: CycleId, number: number, nominationDeadline: Date | null): Cycle {
-  return {
-    id,
-    number,
-    status: 'nominating',
-    responses: 0,
-    nominationDeadline,
-    votingDeadline: null,
-    createdAt: new Date(),
-    options: [],
-    ballots: 0,
-    votingOpenedAt: null,
-    votingClosedAt: null,
-    results: null,
-    winner: null,
-    readingStartedAt: null,
-    finishedAt: null,
-  };
-}
-
 function cycleActions(asAdmin: AsAdmin) {
   return {
     openCycle: async ({ number, nominationDeadline }) => {
-      const id = crypto.randomUUID();
+      const id = cycleIdFor(number);
       await asAdmin((state) => {
-        state.cycles[id] = newCycle(id, number, nominationDeadline);
+        if (id in state.cycles) deny();
+        state.cycles[id] = newDemoCycle(id, number, nominationDeadline);
       });
       return id;
     },
@@ -58,16 +40,6 @@ function cycleActions(asAdmin: AsAdmin) {
         delete state.cycles[cycleId];
       }),
 
-    declareWinner: ({ cycleId, nominationId, book, method, results, startReading }) =>
-      asAdmin((state) => {
-        const cycle = cycleIn(state, cycleId, ['tallying']);
-        if (!cycle.options.includes(nominationId)) deny();
-        cycle.winner = { nominationId, book, method, decidedAt: new Date() };
-        cycle.results = results;
-        cycle.status = startReading ? 'reading' : 'upcoming';
-        cycle.readingStartedAt = startReading ? new Date() : null;
-      }),
-
     startReading: (cycleId) =>
       asAdmin((state) => {
         const cycle = cycleIn(state, cycleId, ['upcoming']);
@@ -81,38 +53,6 @@ function cycleActions(asAdmin: AsAdmin) {
         cycle.status = 'finished';
         cycle.finishedAt = new Date();
       }),
-  } satisfies Partial<AdminPort>;
-}
-
-function votingActions(asAdmin: AsAdmin) {
-  return {
-    startVoting: ({ cycleId, options, votingDeadline }) =>
-      asAdmin((state) => {
-        const cycle = cycleIn(state, cycleId, ['nominating']);
-        if (options.length === 0) deny();
-        cycle.status = 'voting';
-        cycle.options = [...options];
-        cycle.ballots = 0;
-        cycle.votingOpenedAt = new Date();
-        cycle.votingDeadline = votingDeadline;
-        state.tallies[cycleId] = emptyResults(options);
-      }),
-
-    closeVoting: (cycleId) =>
-      asAdmin((state) => {
-        const cycle = cycleIn(state, cycleId, ['voting']);
-        cycle.status = 'tallying';
-        cycle.votingClosedAt = new Date();
-      }),
-
-    readResults: async (cycleId) => {
-      let results: VoteResults | undefined;
-      await asAdmin((state) => {
-        cycleIn(state, cycleId, ['tallying', 'upcoming', 'reading', 'finished']);
-        results = state.tallies[cycleId];
-      });
-      return results ?? deny();
-    },
   } satisfies Partial<AdminPort>;
 }
 
@@ -143,6 +83,11 @@ function allowlistActions(context: DemoContext, asAdmin: AsAdmin) {
         // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
         delete state.allowlist[email];
       }),
+
+    setMemberCount: (members) =>
+      asAdmin((state) => {
+        state.settings.members = members;
+      }),
   } satisfies Partial<AdminPort>;
 }
 
@@ -154,7 +99,6 @@ export function createDemoAdmin(context: DemoContext): AdminPort {
   };
   return {
     ...cycleActions(asAdmin),
-    ...votingActions(asAdmin),
     ...allowlistActions(context, asAdmin),
   };
 }

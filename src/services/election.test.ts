@@ -1,40 +1,45 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Cycle } from '@/domain/types';
-import { answerAs, electionContext, emptyClub, firstValue, voteAs } from '@/test/backend';
+import {
+  MEMBERS,
+  answerAs,
+  cycleOf,
+  cyclesOf,
+  emptyClub,
+  finishAs,
+  settle,
+  voteAs,
+} from '@/test/backend';
 
 import type { DemoBackend } from './demo';
-import {
-  ElectionError,
-  finishCurrentReading,
-  openNominations,
-  startVoting,
-  tallyVotes,
-} from './election';
+import { ElectionError, finishCurrentReading, openNominations } from './election';
 
-async function cyclesOf(backend: DemoBackend) {
-  return firstValue<Cycle[]>((s) => backend.club.watchCycles(s));
+/** Round 1 where rafa, julia and teo nominate and everyone else passes. */
+async function nominatedRound(backend: DemoBackend) {
+  const cycleId = await openNominations(backend.admin, [], null);
+  const rafa = `${await answerAs(backend, cycleId, 'rafa')}`;
+  const julia = `${await answerAs(backend, cycleId, 'julia')}`;
+  const teo = `${await answerAs(backend, cycleId, 'teo')}`;
+  for (const uid of ['bruno', 'lia', 'marina']) await answerAs(backend, cycleId, uid, null);
+  return { cycleId, rafa, julia, teo };
 }
 
-async function cycleOf(backend: DemoBackend, cycleId: string) {
-  return (await cyclesOf(backend)).find((cycle) => cycle.id === cycleId);
-}
-
-/** Opens a cycle where rafa, julia and teo nominate and lia passes. */
-async function nominatedCycle(backend: DemoBackend) {
-  const cycleId = await openNominations(backend.admin, await cyclesOf(backend), null);
-  const rafa = await answerAs(backend, cycleId, 'rafa');
-  const julia = await answerAs(backend, cycleId, 'julia');
-  const teo = await answerAs(backend, cycleId, 'teo');
-  await answerAs(backend, cycleId, 'lia', null);
-  return { cycleId, rafa: `${rafa}`, julia: `${julia}`, teo: `${teo}` };
+/** Everyone not listed in `ballots` votes for the first two books they may. */
+async function everyoneVotes(
+  backend: DemoBackend,
+  cycleId: string,
+  ballots: Record<string, string[]>,
+) {
+  for (const [uid, choices] of Object.entries(ballots))
+    await voteAs(backend, { cycleId, uid, choices });
 }
 
 describe('openNominations', () => {
-  it('numbers cycles and refuses a second open election', async () => {
+  it('names cycles by number and refuses a second open election', async () => {
     const backend = emptyClub();
     const cycleId = await openNominations(backend.admin, [], null);
-    expect((await cycleOf(backend, cycleId))?.number).toBe(1);
+    expect(cycleId).toBe('ciclo-1');
+    expect((await cycleOf(backend, cycleId)).number).toBe(1);
 
     await expect(openNominations(backend.admin, await cyclesOf(backend), null)).rejects.toThrow(
       ElectionError,
@@ -42,114 +47,129 @@ describe('openNominations', () => {
   });
 });
 
-describe('startVoting', () => {
-  it('needs at least one nomination', async () => {
+describe('the automatic flow', () => {
+  it('waits for everyone before opening the vote', async () => {
     const backend = emptyClub();
     const cycleId = await openNominations(backend.admin, [], null);
-    await expect(
-      startVoting(backend.admin, await electionContext(backend, cycleId), null),
-    ).rejects.toMatchObject({ code: 'no-nominations' });
+    await answerAs(backend, cycleId, 'rafa');
+    await settle(backend);
+    expect((await cycleOf(backend, cycleId)).status).toBe('nominating');
   });
 
-  it('declares a single nomination the winner right away', async () => {
+  it('opens the vote with every nomination once everyone answered', async () => {
+    const backend = emptyClub();
+    const { cycleId, rafa, julia, teo } = await nominatedRound(backend);
+    await settle(backend);
+
+    const cycle = await cycleOf(backend, cycleId);
+    expect(cycle.status).toBe('voting');
+    expect([...cycle.options].sort()).toEqual([rafa, julia, teo].sort());
+  });
+
+  it('does not let a member open the vote early', async () => {
+    const backend = emptyClub();
+    const cycleId = await openNominations(backend.admin, [], null);
+    const rafa = `${await answerAs(backend, cycleId, 'rafa')}`;
+    backend.auth.signInAs('julia');
+    await expect(
+      backend.flow.startVoting({ cycleId, options: [rafa], votingDeadline: null }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('declares the winner once everyone voted', async () => {
+    const backend = emptyClub();
+    const { cycleId, rafa, julia, teo } = await nominatedRound(backend);
+    await settle(backend);
+    await everyoneVotes(backend, cycleId, {
+      marina: [rafa, julia],
+      rafa: [julia, teo],
+      julia: [rafa, teo],
+      teo: [rafa, julia],
+      bruno: [teo, rafa],
+    });
+    await settle(backend);
+    expect((await cycleOf(backend, cycleId)).status).toBe('voting');
+
+    await voteAs(backend, { cycleId, uid: 'lia', choices: [julia, rafa] });
+    await settle(backend);
+    const cycle = await cycleOf(backend, cycleId);
+    expect(cycle.status).toBe('reading');
+    expect(cycle.winner).toMatchObject({ nominationId: rafa, method: 'votes', drawnFrom: [] });
+    expect(cycle.results?.votes[rafa]).toBe(5);
+  });
+
+  it('settles a tie that first choices cannot break with a draw anyone can check', async () => {
+    const backend = emptyClub();
+    const { cycleId, rafa, julia, teo } = await nominatedRound(backend);
+    await settle(backend);
+    await everyoneVotes(backend, cycleId, {
+      marina: [rafa, julia],
+      rafa: [julia, teo],
+      julia: [rafa, teo],
+      teo: [julia, rafa],
+      bruno: [teo, rafa],
+      lia: [teo, julia],
+    });
+    await settle(backend);
+
+    const cycle = await cycleOf(backend, cycleId);
+    const drawnFrom = [rafa, julia, teo].sort();
+    expect(cycle.winner?.method).toBe('draw');
+    expect(cycle.winner?.drawnFrom).toEqual(drawnFrom);
+    const seed = cycle.votingClosedAt?.getTime() ?? 0;
+    expect(cycle.winner?.nominationId).toBe(drawnFrom[seed % 3]);
+  });
+
+  it('skips the vote when there is a single nomination', async () => {
     const backend = emptyClub();
     const cycleId = await openNominations(backend.admin, [], null);
     const only = await answerAs(backend, cycleId, 'rafa');
+    for (const uid of MEMBERS.filter((member) => member !== 'rafa')) {
+      await answerAs(backend, cycleId, uid, null);
+    }
+    await settle(backend);
 
-    const resolution = await startVoting(
-      backend.admin,
-      await electionContext(backend, cycleId),
-      null,
-    );
-
-    expect(resolution).toEqual({ nominationId: only, method: 'unopposed', drawnFrom: [] });
-    expect((await cycleOf(backend, cycleId))?.status).toBe('reading');
-  });
-});
-
-describe('tallyVotes', () => {
-  async function votingCycle() {
-    const backend = emptyClub();
-    const ids = await nominatedCycle(backend);
-    await startVoting(backend.admin, await electionContext(backend, ids.cycleId), null);
-    const vote = (uid: string, choices: string[]) =>
-      voteAs(backend, { cycleId: ids.cycleId, uid, choices });
-    const tally = async (random?: () => number) =>
-      tallyVotes(backend.admin, await electionContext(backend, ids.cycleId), random);
-    return { backend, ...ids, vote, tally };
-  }
-
-  it('declares the most votes, even with fewer first choices', async () => {
-    const { backend, cycleId, rafa, julia, teo, vote, tally } = await votingCycle();
-    await vote('lia', [julia, rafa]);
-    await vote('bruno', [julia, rafa]);
-    await vote('teo', [julia, rafa]);
-    await vote('julia', [teo, rafa]);
-
-    expect(await tally()).toEqual({ nominationId: rafa, method: 'votes', drawnFrom: [] });
-    const cycle = await cycleOf(backend, cycleId);
-    expect(cycle?.status).toBe('reading');
-    expect(cycle?.winner?.book.title).toBe('Livro de rafa');
-    expect(cycle?.results?.votes).toEqual({ [rafa]: 4, [julia]: 3, [teo]: 1 });
-  });
-
-  it('breaks a tie by first choices', async () => {
-    const { rafa, julia, vote, tally } = await votingCycle();
-    await vote('lia', [rafa, julia]);
-    await vote('bruno', [julia, rafa]);
-    await vote('teo', [rafa, julia]);
-
-    expect(await tally()).toEqual({ nominationId: rafa, method: 'first-choices', drawnFrom: [] });
-  });
-
-  it('draws among the books still tied', async () => {
-    const { backend, cycleId, rafa, julia, vote, tally } = await votingCycle();
-    await vote('lia', [rafa, julia]);
-    await vote('bruno', [julia, rafa]);
-
-    expect(await tally(() => 0.99)).toEqual({
-      nominationId: julia,
-      method: 'draw',
-      drawnFrom: [rafa, julia],
+    expect((await cycleOf(backend, cycleId)).winner).toMatchObject({
+      nominationId: only,
+      method: 'unopposed',
     });
-    expect((await cycleOf(backend, cycleId))?.winner?.method).toBe('draw');
   });
 
-  it('picks up where a previous attempt stopped', async () => {
-    const { backend, cycleId, rafa, julia, vote, tally } = await votingCycle();
-    await vote('lia', [rafa, julia]);
-    // A previous attempt closed voting, then failed before declaring.
-    await backend.admin.closeVoting(cycleId);
-
-    expect((await tally()).nominationId).toBe(rafa);
-  });
-
-  it('only counts a cycle that is voting', async () => {
+  it('ends the book once everyone finished it and opens the next round', async () => {
     const backend = emptyClub();
-    const { cycleId } = await nominatedCycle(backend);
-    await expect(
-      tallyVotes(backend.admin, await electionContext(backend, cycleId)),
-    ).rejects.toMatchObject({ code: 'not-voting' });
+    const cycleId = await openNominations(backend.admin, [], null);
+    await answerAs(backend, cycleId, 'rafa');
+    for (const uid of MEMBERS.filter((member) => member !== 'rafa')) {
+      await answerAs(backend, cycleId, uid, null);
+    }
+    await settle(backend);
+
+    for (const uid of MEMBERS.slice(0, 5)) await finishAs(backend, cycleId, uid);
+    await settle(backend);
+    expect((await cycleOf(backend, cycleId)).status).toBe('reading');
+
+    await finishAs(backend, cycleId, 'lia');
+    await settle(backend);
+    expect((await cycleOf(backend, cycleId)).status).toBe('finished');
+    expect((await cycleOf(backend, 'ciclo-2')).status).toBe('nominating');
+  });
+
+  it('counts each reader once', async () => {
+    const backend = emptyClub();
+    const cycleId = await openNominations(backend.admin, [], null);
+    await answerAs(backend, cycleId, 'rafa');
+    for (const uid of MEMBERS.filter((member) => member !== 'rafa')) {
+      await answerAs(backend, cycleId, uid, null);
+    }
+    await settle(backend);
+    await finishAs(backend, cycleId, 'teo');
+    await expect(finishAs(backend, cycleId, 'teo')).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
   });
 });
 
-describe('reading queue', () => {
-  it('queues a book decided while another is read, and starts it after', async () => {
-    const backend = emptyClub();
-    const firstId = await openNominations(backend.admin, [], null);
-    await answerAs(backend, firstId, 'rafa');
-    await startVoting(backend.admin, await electionContext(backend, firstId), null);
-
-    const secondId = await openNominations(backend.admin, await cyclesOf(backend), null);
-    await answerAs(backend, secondId, 'julia');
-    await startVoting(backend.admin, await electionContext(backend, secondId), null);
-    expect((await cycleOf(backend, secondId))?.status).toBe('upcoming');
-
-    await finishCurrentReading(backend.admin, await cyclesOf(backend));
-    expect((await cycleOf(backend, firstId))?.status).toBe('finished');
-    expect((await cycleOf(backend, secondId))?.status).toBe('reading');
-  });
-
+describe('finishCurrentReading', () => {
   it('has nothing to finish when no book is being read', async () => {
     const backend = emptyClub();
     await expect(finishCurrentReading(backend.admin, [])).rejects.toMatchObject({

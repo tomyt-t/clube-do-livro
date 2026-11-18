@@ -94,7 +94,9 @@ export function createDemoClub(context: DemoContext): ClubPort {
             : { kind: 'passed' },
         };
         const cycle = state.cycles[cycleId];
-        if (cycle) cycle.responses += 1;
+        if (!cycle) return;
+        cycle.responses += 1;
+        if (nomination) cycle.nominationIds = [...cycle.nominationIds, nomination.id];
       });
       return nomination?.id ?? null;
     },
@@ -111,6 +113,23 @@ export function createDemoClub(context: DemoContext): ClubPort {
         state.tallies[cycleId] = addBallot(tally, choices);
         const cycle = state.cycles[cycleId];
         if (cycle) cycle.ballots += 1;
+      });
+    },
+
+    watchSettings: (subscriber) => watch(context, (state) => state.settings, subscriber),
+
+    watchHasFinished: (cycleId, uid, subscriber) =>
+      watch(context, (state) => state.readers[cycleId]?.includes(uid) ?? false, subscriber),
+
+    markFinished: async ({ cycleId, uid }) => {
+      await pause(context);
+      requireSelf(context, uid);
+      const finished = store.current.readers[cycleId]?.includes(uid) ?? false;
+      if (cycleOf(context, cycleId).status !== 'reading' || finished) deny();
+      store.update((state) => {
+        state.readers[cycleId] = [...(state.readers[cycleId] ?? []), uid];
+        const cycle = state.cycles[cycleId];
+        if (cycle) cycle.finishedReaders += 1;
       });
     },
   };

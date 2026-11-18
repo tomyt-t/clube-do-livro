@@ -9,6 +9,7 @@ import { countOf, formatDay } from '@/ui/format';
 import { ExternalIcon } from '@/ui/icons';
 
 import styles from './CurrentReading.module.css';
+import { FinishedReading } from './FinishedReading';
 import { ReadingSynopsis } from './ReadingSynopsis';
 
 /** "Escolhida …": how the club got to this book. */
@@ -79,6 +80,7 @@ export function CurrentReading({ cycle, winner }: CurrentReadingProps) {
           </a>
         </div>
       )}
+      {cycle.status === 'reading' && <FinishedReading cycle={cycle} />}
     </article>
   );
 }

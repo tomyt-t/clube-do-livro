@@ -1,4 +1,12 @@
-import type { Cycle, CycleId, MemberId, Nomination, OwnAnswer, VoteResults } from '@/domain/types';
+import type {
+  ClubSettings,
+  Cycle,
+  CycleId,
+  MemberId,
+  Nomination,
+  OwnAnswer,
+  VoteResults,
+} from '@/domain/types';
 
 import type { MemberProfile } from '../backend';
 
@@ -12,6 +20,9 @@ export interface DemoState {
   answers: Record<CycleId, Record<MemberId, OwnAnswer> | undefined>;
   tallies: Record<CycleId, VoteResults | undefined>;
   receipts: Record<CycleId, MemberId[] | undefined>;
+  /** Who marked "Acabei de ler!", per cycle. */
+  readers: Record<CycleId, MemberId[] | undefined>;
+  settings: ClubSettings;
 }
 
 export interface DemoPersona {

@@ -4,8 +4,9 @@ import tableScene from '@/assets/illustrations/boteco-mesa.svg';
 
 import type { Cycle, Nomination, NominationId } from '@/domain/types';
 import { requiredChoices } from '@/domain/voting';
+import { useMemberCount } from '@/features/club/use-club';
 import { cx } from '@/ui/cx';
-import { peopleWho, VOTED } from '@/ui/format';
+import { peopleOutOf, VOTED } from '@/ui/format';
 import { useMediaQuery, WIDE } from '@/ui/use-media-query';
 
 import {
@@ -56,12 +57,13 @@ function BallotHeader({
   view: BallotView;
   onView: (view: BallotView) => void;
 }) {
+  const members = useMemberCount();
   return (
     <header className={styles.header}>
       <div className={styles.viewbar}>
         <div>
           <h2>{required === 1 ? 'Escolha uma leitura' : 'Escolha duas leituras'}</h2>
-          <p>{peopleWho(cycle.ballots, VOTED)}</p>
+          <p>{peopleOutOf(cycle.ballots, members, VOTED).replace(/\.$/, '')}</p>
         </div>
         <ViewToggle view={view} onChange={onView} />
       </div>
@@ -70,6 +72,23 @@ function BallotHeader({
       )}
     </header>
   );
+}
+
+/** The ballot being filled in, with the ways to change it. */
+function useBallotDraft(required: number) {
+  const [ballot, setBallot] = useState<BallotDraft>(EMPTY_BALLOT);
+  return {
+    ballot,
+    pick: (id: NominationId) => {
+      setBallot((current) => togglePick(current, id, required));
+    },
+    dislike: (id: NominationId) => {
+      setBallot((current) => toggleDislike(current, id));
+    },
+    swap: () => {
+      setBallot(swapPicks);
+    },
+  };
 }
 
 interface BallotProps {
@@ -84,7 +103,7 @@ interface BallotProps {
 
 export function Ballot({ cycle, options, own, uid, intro }: BallotProps) {
   const required = requiredChoices(cycle.options, own);
-  const [ballot, setBallot] = useState<BallotDraft>(EMPTY_BALLOT);
+  const { ballot, pick, dislike, swap } = useBallotDraft(required);
   const [view, setView] = useBallotView();
   const [confirming, setConfirming] = useState(false);
   const casting = useCastBallot(cycle.id, uid);
@@ -95,9 +114,7 @@ export function Ballot({ cycle, options, own, uid, intro }: BallotProps) {
     picks,
     required,
     complete: isComplete(ballot, required),
-    onSwap: () => {
-      setBallot(swapPicks);
-    },
+    onSwap: swap,
     onConfirm: () => {
       setConfirming(true);
     },
@@ -107,23 +124,14 @@ export function Ballot({ cycle, options, own, uid, intro }: BallotProps) {
     ballot,
     required,
     own,
-    onPick: (id: NominationId) => {
-      setBallot((current) => togglePick(current, id, required));
-    },
+    onPick: pick,
   };
   const header = <BallotHeader cycle={cycle} required={required} view={view} onView={setView} />;
   const choices =
     view === 'list' ? (
       <BallotList {...choose} />
     ) : (
-      <BallotDeck
-        {...choose}
-        wide={wide}
-        keyboard={!confirming}
-        onDislike={(id) => {
-          setBallot((current) => toggleDislike(current, id));
-        }}
-      />
+      <BallotDeck {...choose} wide={wide} keyboard={!confirming} onDislike={dislike} />
     );
 
   return (

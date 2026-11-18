@@ -3,6 +3,7 @@ import type { Backend } from '../backend';
 import { createDemoAdmin } from './admin';
 import { createDemoAuth, type DemoAuthPort } from './auth';
 import { createDemoClub } from './club';
+import { createDemoFlow } from './flow';
 import { DEMO_ADMIN, DEMO_PERSONAS, createDemoState } from './seed';
 import type { DemoScenario } from './scenarios';
 import { DemoStore, type DemoPersona, type DemoState } from './state';
@@ -35,6 +36,7 @@ export function createDemoBackend(options: DemoOptions = {}): DemoBackend {
     kind: 'demo',
     auth: createDemoAuth(context, DEMO_ADMIN),
     club: createDemoClub(context),
+    flow: createDemoFlow(context),
     admin: createDemoAdmin(context),
     personas: DEMO_PERSONAS,
     loadScenario: (scenario) => {

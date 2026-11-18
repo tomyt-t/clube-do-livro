@@ -23,7 +23,7 @@ function ElectionOverview({ cycles, sidebar }: { cycles: readonly Cycle[]; sideb
   if (!election) {
     return (
       <EmptyState title="Nenhuma votação aberta">
-        Quando quem organiza o clube abrir as indicações, é por aqui que você indica uma leitura.
+        As indicações da próxima leitura abrem quando todos terminarem a leitura atual.
       </EmptyState>
     );
   }

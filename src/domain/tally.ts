@@ -1,4 +1,4 @@
-import { drawWinner, secureRandom } from './draw';
+import { drawOrder, drawWinner } from './draw';
 import type { DecisionMethod, NominationId, RankedChoices, Tally, VoteResults } from './types';
 
 export interface Standing {
@@ -12,7 +12,7 @@ export interface Standing {
 export interface Decision {
   nominationId: NominationId;
   method: DecisionMethod;
-  /** The books still tied when a draw was needed. */
+  /** The books still tied when a draw was needed, in draw order. */
   drawnFrom: NominationId[];
 }
 
@@ -62,12 +62,13 @@ export function finalists(options: readonly NominationId[], results: VoteResults
 
 /**
  * The club's rule: the most votes wins. A tie goes to the most first
- * choices; if still tied, a draw among the books left.
+ * choices; if still tied, a draw among the books left, fixed by `drawSeed`
+ * (the milliseconds when voting closed).
  */
 export function decide(
   options: readonly NominationId[],
   results: VoteResults,
-  random: () => number = secureRandom,
+  drawSeed: number,
 ): Decision {
   if (options.length === 0) throw new Error('Não há opções para apurar.');
   const [only] = options;
@@ -86,5 +87,9 @@ export function decide(
   if (byFirsts.length === 1 && firstChoice !== undefined) {
     return { nominationId: firstChoice, method: 'first-choices', drawnFrom: [] };
   }
-  return { nominationId: drawWinner(byFirsts, random), method: 'draw', drawnFrom: byFirsts };
+  return {
+    nominationId: drawWinner(byFirsts, drawSeed),
+    method: 'draw',
+    drawnFrom: drawOrder(byFirsts),
+  };
 }

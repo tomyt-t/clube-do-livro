@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 
 import { useBackend } from '@/app/services';
 import { useWatch, type Watched } from '@/app/use-watch';
-import type { Cycle, CycleId, MemberId, Nomination, OwnAnswer } from '@/domain/types';
+import type { ClubSettings, Cycle, CycleId, MemberId, Nomination, OwnAnswer } from '@/domain/types';
 import type { Subscriber } from '@/services/backend';
 
 /** Live club data shared by the pages. */
@@ -27,6 +27,28 @@ export function useOwnAnswer(cycleId: CycleId, uid: MemberId): Watched<OwnAnswer
   const { club } = useBackend();
   const watch = useCallback(
     (s: Subscriber<OwnAnswer | null>) => club.watchOwnAnswer(cycleId, uid, s),
+    [club, cycleId, uid],
+  );
+  return useWatch(watch);
+}
+
+/** How many members "everyone" is. */
+export function useSettings(): Watched<ClubSettings> {
+  const { club } = useBackend();
+  const watch = useCallback((s: Subscriber<ClubSettings>) => club.watchSettings(s), [club]);
+  return useWatch(watch);
+}
+
+/** The member count once known; zero while loading or not set up. */
+export function useMemberCount(): number {
+  const settings = useSettings();
+  return settings.status === 'ready' ? settings.value.members : 0;
+}
+
+export function useHasFinished(cycleId: CycleId, uid: MemberId): Watched<boolean> {
+  const { club } = useBackend();
+  const watch = useCallback(
+    (s: Subscriber<boolean>) => club.watchHasFinished(cycleId, uid, s),
     [club, cycleId, uid],
   );
   return useWatch(watch);

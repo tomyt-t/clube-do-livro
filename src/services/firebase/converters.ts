@@ -3,6 +3,7 @@ import { Timestamp } from 'firebase/firestore';
 import { SYNOPSIS_SOURCES } from '@/domain/book';
 import type {
   Book,
+  ClubSettings,
   Cycle,
   CycleStatus,
   DecisionMethod,
@@ -91,7 +92,7 @@ function toWinner(value: unknown): Winner | null {
   const decidedAt = dateOrNull(value.decidedAt);
   const nominationId = text(value.nominationId);
   if (!book || !method || !decidedAt || nominationId === '') return null;
-  return { nominationId, book, method, decidedAt };
+  return { nominationId, book, method, decidedAt, drawnFrom: textList(value.drawnFrom) };
 }
 
 export function toCycle(id: string, data: Data): Cycle | null {
@@ -103,6 +104,7 @@ export function toCycle(id: string, data: Data): Cycle | null {
     number: count(data.number),
     status,
     responses: count(data.responses),
+    nominationIds: textList(data.nominationIds),
     nominationDeadline: dateOrNull(data.nominationDeadline),
     votingDeadline: dateOrNull(data.votingDeadline),
     createdAt,
@@ -113,6 +115,7 @@ export function toCycle(id: string, data: Data): Cycle | null {
     results: toResults(data.results),
     winner: toWinner(data.winner),
     readingStartedAt: dateOrNull(data.readingStartedAt),
+    finishedReaders: count(data.finishedReaders),
     finishedAt: dateOrNull(data.finishedAt),
   };
 }
@@ -120,6 +123,11 @@ export function toCycle(id: string, data: Data): Cycle | null {
 export function toNomination(id: string, data: Data): Nomination | null {
   const book = toBook(data.book);
   return book ? { id, book } : null;
+}
+
+/** Missing settings mean "not set up yet": zero members, so nothing advances on its own. */
+export function toSettings(data: Data | null): ClubSettings {
+  return { members: count(data?.members) };
 }
 
 export function toOwnAnswer(data: Data): OwnAnswer {

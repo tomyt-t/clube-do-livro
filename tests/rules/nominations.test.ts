@@ -4,6 +4,7 @@ import {
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
+  arrayUnion,
   deleteDoc,
   doc,
   getDoc,
@@ -62,11 +63,19 @@ function pass(persona: Persona) {
 }
 
 /** The same batch the app sends, but with an arbitrary (unvalidated) book. */
-async function rawNominate(db: Firestore, uid: string, book: Record<string, unknown>) {
+async function rawNominate(
+  db: Firestore,
+  uid: string,
+  book: Record<string, unknown>,
+  nominationId = `raw-${uid}`,
+) {
   const batch = writeBatch(db);
-  batch.set(doc(db, 'cycles', CYCLE, 'nominations', 'raw'), { book });
-  batch.set(doc(db, 'cycles', CYCLE, 'answers', uid), { nominationId: 'raw' });
-  batch.update(doc(db, 'cycles', CYCLE), { responses: increment(1) });
+  batch.set(doc(db, 'cycles', CYCLE, 'nominations', nominationId), { book });
+  batch.set(doc(db, 'cycles', CYCLE, 'answers', uid), { nominationId });
+  batch.update(doc(db, 'cycles', CYCLE), {
+    responses: increment(1),
+    nominationIds: arrayUnion(nominationId),
+  });
   await batch.commit();
 }
 
@@ -150,8 +159,26 @@ describe('forged writes', () => {
     batch.set(doc(db, 'cycles', CYCLE, 'nominations', 'first'), { book: makeBook() });
     batch.set(doc(db, 'cycles', CYCLE, 'nominations', 'second'), { book: makeBook() });
     batch.set(doc(db, 'cycles', CYCLE, 'answers', ana.uid), { nominationId: 'first' });
-    batch.update(doc(db, 'cycles', CYCLE), { responses: increment(1) });
+    batch.update(doc(db, 'cycles', CYCLE), {
+      responses: increment(1),
+      nominationIds: arrayUnion('first'),
+    });
     await assertFails(batch.commit());
+  });
+
+  it('keeps the list of nominations honest', async () => {
+    const db = dbAs(env, ana);
+    const answerAndList = (nominationIds: unknown) => {
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'cycles', CYCLE, 'answers', ana.uid), { nominationId: null });
+      batch.update(doc(db, 'cycles', CYCLE), { responses: increment(1), nominationIds });
+      return batch.commit();
+    };
+    // Passing cannot slip a book into the ballot...
+    await assertFails(answerAndList(arrayUnion('slipped-in')));
+    // ...nor drop the ones already there.
+    await rawNominate(dbAs(env, bia), bia.uid, { ...makeBook() });
+    await assertFails(answerAndList([]));
   });
 
   it('blocks inflating the response count', async () => {

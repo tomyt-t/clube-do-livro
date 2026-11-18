@@ -71,8 +71,8 @@ describe('ballot, list view', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Confirmar voto' }));
 
     expect(await screen.findByText('Seu voto foi registrado.')).toBeInTheDocument();
-    await backend.admin.closeVoting('c4');
-    const results = await backend.admin.readResults('c4');
+    await backend.flow.closeVoting('ciclo-4');
+    const results = await backend.flow.readResults('ciclo-4');
     expect(results.firsts.vidas).toBe(1);
     expect(results.votes.dom).toBe(2);
   });

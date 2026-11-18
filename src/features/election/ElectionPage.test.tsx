@@ -57,7 +57,7 @@ function renderElection(uid = 'marina') {
 }
 
 async function storedNominations(backend: ReturnType<typeof createDemoBackend>) {
-  return firstValue<Nomination[]>((s) => backend.club.watchNominations('c4', s));
+  return firstValue<Nomination[]>((s) => backend.club.watchNominations('ciclo-4', s));
 }
 
 /** The rows of the nominations list, in the order shown, once they arrive. */

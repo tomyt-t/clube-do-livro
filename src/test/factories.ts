@@ -18,6 +18,7 @@ export function makeCycle(overrides: Partial<Cycle> = {}): Cycle {
     number: 1,
     status: 'nominating',
     responses: 0,
+    nominationIds: [],
     nominationDeadline: null,
     votingDeadline: null,
     createdAt: new Date('2026-01-01T12:00:00Z'),
@@ -28,6 +29,7 @@ export function makeCycle(overrides: Partial<Cycle> = {}): Cycle {
     results: null,
     winner: null,
     readingStartedAt: null,
+    finishedReaders: 0,
     finishedAt: null,
     ...overrides,
   };

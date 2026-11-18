@@ -17,15 +17,17 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import type { DecisionMethod, NominationId, VoteResults } from '@/domain/types';
 import {
-  closeVoting,
-  declareWinner,
   deleteCycle,
   finishReading,
   openCycle,
-  readResults,
   startReading,
-  startVoting,
 } from '@/services/firebase/admin-writes';
+import {
+  closeVoting,
+  declareWinner,
+  readResults,
+  startVoting,
+} from '@/services/firebase/flow-writes';
 
 import {
   admin,
@@ -83,17 +85,19 @@ interface Declaration {
   nominationId: NominationId;
   method: DecisionMethod;
   results: VoteResults;
+  drawnFrom?: NominationId[];
   startReading?: boolean;
   persona?: Persona;
 }
 
 function declare(declaration: Declaration) {
-  const { nominationId, method, results, startReading = true, persona = admin } = declaration;
-  return declareWinner(dbAs(env, persona), {
+  const { nominationId, method, results, drawnFrom = [], startReading = true } = declaration;
+  return declareWinner(dbAs(env, declaration.persona ?? admin), {
     cycleId: CYCLE,
     nominationId,
     book: bookFor(nominationId),
     method,
+    drawnFrom,
     results,
     startReading,
   });
@@ -112,10 +116,14 @@ describe('opening a cycle', () => {
 
   it('must start at the nomination phase with clean counters', async () => {
     const db = dbAs(env, admin);
-    await assertFails(setDoc(doc(db, 'cycles', 'x'), cycleData({ status: 'voting' })));
-    await assertFails(setDoc(doc(db, 'cycles', 'y'), cycleData({ responses: 5 })));
-    await assertFails(setDoc(doc(db, 'cycles', 'z'), cycleData({ options: [N_ANA] })));
-    await assertFails(setDoc(doc(db, 'cycles', 'w'), cycleData({ extra: true })));
+    const create = (id: string, changes: Record<string, unknown>) =>
+      setDoc(doc(db, 'cycles', id), { ...cycleData(changes), createdAt: serverTimestamp() });
+    await assertSucceeds(create('ciclo-1', {}));
+    await assertFails(create('ciclo-2', { number: 2, status: 'voting' }));
+    await assertFails(create('ciclo-3', { number: 3, responses: 5 }));
+    await assertFails(create('ciclo-4', { number: 4, nominationIds: [N_ANA] }));
+    await assertFails(create('ciclo-5', { number: 5, extra: true }));
+    await assertFails(create('qualquer-nome', { number: 6 }));
   });
 
   it('can be dropped only before voting starts', async () => {
@@ -211,7 +219,7 @@ describe('the admin and the votes', () => {
     );
   });
 
-  it('is the only one who can close the vote', async () => {
+  it('is the only one who can close the vote early', async () => {
     await assertFails(closeVoting(dbAs(env, bia), CYCLE));
   });
 });
@@ -245,6 +253,7 @@ describe('declaring a clear winner', () => {
       nominationId: N_ANA,
       book: { ...bookFor(N_ANA), title: 'Outro livro' },
       method: 'votes',
+      drawnFrom: [],
       results,
       startReading: true,
     });
@@ -255,6 +264,9 @@ describe('declaring a clear winner', () => {
     for (const method of ['first-choices', 'draw', 'unopposed'] as const) {
       await assertFails(declare({ nominationId: N_ANA, method, results }));
     }
+    await assertFails(
+      declare({ nominationId: N_ANA, method: 'votes', results, drawnFrom: [N_ANA, N_BIA] }),
+    );
   });
 
   it('never changes a declared winner', async () => {
@@ -286,11 +298,20 @@ describe('ties', () => {
     await assertSucceeds(declare({ nominationId: N_ANA, method: 'first-choices', results }));
   });
 
-  it('still tied, go to a draw among the tied books only', async () => {
+  it('still tied, go to a draw fixed by the closing time', async () => {
     const results = await closedWith({ [N_ANA]: [3, 2], [N_BIA]: [3, 2], [N_ADMIN]: [2, 0] });
+    // The tied books in id order; closed at an odd millisecond, so index 1 of 2 wins.
+    const drawnFrom = [N_ANA, N_BIA];
+    const draw = (nominationId: NominationId, list: NominationId[]) =>
+      declare({ nominationId, method: 'draw', results, drawnFrom: list });
+
     await assertFails(declare({ nominationId: N_ANA, method: 'first-choices', results }));
-    await assertFails(declare({ nominationId: N_ADMIN, method: 'draw', results }));
-    await assertSucceeds(declare({ nominationId: N_BIA, method: 'draw', results }));
+    await assertFails(draw(N_ANA, drawnFrom));
+    await assertFails(draw(N_BIA, [N_BIA, N_ANA]));
+    await assertFails(draw(N_BIA, [N_ANA, N_BIA, N_ADMIN]));
+    await assertFails(draw(N_BIA, [N_BIA]));
+    await assertFails(draw(N_ADMIN, [N_ADMIN, N_BIA]));
+    await assertSucceeds(draw(N_BIA, drawnFrom));
   });
 });
 
