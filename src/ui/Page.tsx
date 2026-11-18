@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import tableScene from '@/assets/illustrations/boteco-mesa.svg';
+
 import { cx } from './cx';
 import styles from './Page.module.css';
 
@@ -8,12 +10,31 @@ interface PageProps {
   title: string;
   hideTitle?: boolean;
   width?: 'content' | 'wide';
+  /** The boteco scene behind the title. Decorative: hidden from assistive tech. */
+  art?: boolean;
   children: ReactNode;
 }
 
-export function Page({ title, hideTitle = false, width = 'content', children }: PageProps) {
+export function Page({
+  title,
+  hideTitle = false,
+  width = 'content',
+  art = true,
+  children,
+}: PageProps) {
   return (
     <div className={cx(styles.page, width === 'wide' && styles.wide)}>
+      {art && (
+        <img
+          className={styles.art}
+          src={tableScene}
+          alt=""
+          aria-hidden="true"
+          width="224"
+          height="186"
+          decoding="async"
+        />
+      )}
       <h1 className={hideTitle ? styles.hiddenTitle : styles.title}>{title}</h1>
       {children}
     </div>
