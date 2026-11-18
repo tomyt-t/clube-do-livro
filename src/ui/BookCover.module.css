@@ -1,0 +1,49 @@
+.cover {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: var(--radius-cover);
+  background: var(--line);
+  box-shadow: var(--shadow-cover);
+}
+
+/* The spine: a darker fold and a highlight near the left edge. */
+.cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgb(0 0 0 / 0.3),
+    rgb(255 255 255 / 0.18) 3.5%,
+    transparent 9%
+  );
+  pointer-events: none;
+}
+
+.image {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity var(--duration) var(--ease-out);
+}
+
+.loaded {
+  opacity: 1;
+}
+
+/* Under the image: the title set on cloth, like a library binding. */
+.plain {
+  display: flex;
+  align-items: flex-end;
+  block-size: 100%;
+  padding: 12% 12% 14% 16%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 650 clamp(0.85rem, 0.7rem + 0.6vw, 1.15rem) / 1.08 var(--serif);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}

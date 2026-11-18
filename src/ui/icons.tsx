@@ -42,6 +42,17 @@ export function BallotIcon(props: IconProps) {
   );
 }
 
+/** Opens somewhere outside the site. */
+export function ExternalIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M13.5 4.5h6v6" />
+      <path d="m19.5 4.5-8 8" />
+      <path d="M17 13.5v6H4.5V7H10.5" />
+    </Icon>
+  );
+}
+
 /** Google's "G", as its sign-in guidelines ask for on Google buttons. */
 export function GoogleMark(props: IconProps) {
   return (

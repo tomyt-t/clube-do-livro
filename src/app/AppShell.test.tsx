@@ -1,24 +1,25 @@
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { renderWithApp } from '@/test/render';
+import { renderAsMember } from '@/test/render';
 
 import { AppRoutes } from './AppRoutes';
 import { AppShell } from './AppShell';
 
 function renderShell(route = '/') {
-  return renderWithApp(
+  return renderAsMember(
     <AppShell clubName="Clube de Teste" account={<button type="button">Conta</button>}>
       <AppRoutes />
     </AppShell>,
+    'marina',
     { route },
   );
 }
 
 describe('AppShell', () => {
-  it('shows the club name, the three sections and the account slot', () => {
+  it('shows the club name, the three sections and the account slot', async () => {
     renderShell();
-    expect(screen.getByRole('link', { name: 'Clube de Teste' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Clube de Teste' })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Principal' });
     expect(
       within(nav)
@@ -30,7 +31,10 @@ describe('AppShell', () => {
 
   it('marks the current section and moves between sections', async () => {
     const { user } = renderShell();
-    expect(screen.getByRole('link', { name: 'Lendo' })).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByRole('link', { name: 'Lendo' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
 
     await user.click(screen.getByRole('link', { name: 'Votação' }));
 
@@ -41,8 +45,6 @@ describe('AppShell', () => {
 
   it('sends unknown addresses to the current reading', async () => {
     renderShell('/nao-existe');
-    expect(
-      await screen.findByRole('heading', { name: 'Nenhuma leitura em andamento' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Cem Anos de Solidão' })).toBeInTheDocument();
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { makeBook } from '@/test/factories';
 
-import { BOOK_LIMITS, isUploadedCover, normalizeBook, validateBook } from './book';
+import { BOOK_LIMITS, isUploadedCover, normalizeBook, splitTitle, validateBook } from './book';
 
 const TINY_JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2w==';
 
@@ -70,5 +70,29 @@ describe('isUploadedCover', () => {
   it('rejects images over the size limit', () => {
     const huge = `data:image/jpeg;base64,${'A'.repeat(BOOK_LIMITS.uploadedCover)}`;
     expect(isUploadedCover(huge)).toBe(false);
+  });
+});
+
+describe('splitTitle', () => {
+  it.each([
+    ['Torto Arado, Itamar Vieira Junior', 'Torto Arado', 'Itamar Vieira Junior'],
+    ['Berserk vol. 1 / Kentaro Miura', 'Berserk vol. 1', 'Kentaro Miura'],
+    ['Watchmen - Alan Moore', 'Watchmen', 'Alan Moore'],
+    ['Eu, Robô — Isaac Asimov', 'Eu, Robô', 'Isaac Asimov'],
+    [
+      'Memórias Póstumas de Brás Cubas, Machado de Assis',
+      'Memórias Póstumas de Brás Cubas',
+      'Machado de Assis',
+    ],
+  ])('reads %s', (text, title, author) => {
+    expect(splitTitle(text)).toEqual({ title, author });
+  });
+
+  it('keeps everything as the title without a separator', () => {
+    expect(splitTitle('Grande Sertão: Veredas')).toEqual({
+      title: 'Grande Sertão: Veredas',
+      author: null,
+    });
+    expect(splitTitle('Sem autor, ')).toEqual({ title: 'Sem autor, ', author: null });
   });
 });

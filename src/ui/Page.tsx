@@ -35,7 +35,7 @@ export function Page({
           decoding="async"
         />
       )}
-      <h1 className={hideTitle ? styles.hiddenTitle : styles.title}>{title}</h1>
+      <h1 className={hideTitle ? 'visually-hidden' : styles.title}>{title}</h1>
       {children}
     </div>
   );
