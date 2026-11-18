@@ -13,8 +13,9 @@ rules_version = '2';
 //   member to their choices.
 // * Admin writes follow a state machine and cannot touch the tally; the
 //   declared winner must follow the club's rule (most votes, then most first
-//   choices, then a draw among the books still tied). A draw is fixed by the
-//   time voting closed, so these rules recompute it.
+//   choices, then a draw among the books still tied). A draw is a
+//   pseudo-random number started from the time voting closed, so these rules
+//   recompute it.
 // * The cycle moves on by itself: any member may take the next step once
 //   everyone (settings/club.members) has answered, voted or finished the
 //   book. The organizer may take a step at any time.
@@ -528,14 +529,27 @@ service cloud.firestore {
         && (n < 20 || (o[19] in d ? v[o[19]] * M + f[o[19]] == top : v[o[19]] * M + f[o[19]] < top));
     }
 
+    // The pseudo-random number a closing time gives (0 to 32767): a linear
+    // congruential generator with the C library's constants, started from the
+    // milliseconds, three steps, high 15 bits. src/domain/draw.ts runs the
+    // same one; products stay within 64-bit integers.
+    function drawNumber(closedAt) {
+      let m = 2147483648;
+      let s0 = closedAt.toMillis() % m;
+      let s1 = (1103515245 * s0 + 12345) % m;
+      let s2 = (1103515245 * s1 + 12345) % m;
+      let s3 = (1103515245 * s2 + 12345) % m;
+      return s3 / 65536;
+    }
+
     // The draw list holds exactly the books tied with the winner, in the
-    // ballot's order (fixed when voting opened); the winner is the one at the
-    // closing time's milliseconds modulo their count. Nobody picks it.
+    // ballot's order (fixed when voting opened); the winner is the one the
+    // closing time's pseudo-random number lands on. Nobody picks it.
     function isFairDraw(o, r, w, d, closedAt) {
       return d is list && d.size() >= 2
         // Ballot options, each once, in the ballot's order: no loop needed.
         && o.removeAll(o.removeAll(d)) == d
-        && d[closedAt.toMillis() % d.size()] == w
+        && d[drawNumber(closedAt) % d.size()] == w
         && isTop(o, r, w, d);
     }
 

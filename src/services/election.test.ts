@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { drawNumber } from '@/domain/draw';
 import {
   MEMBERS,
   answerAs,
@@ -117,7 +118,7 @@ describe('the automatic flow', () => {
     expect(cycle.winner?.method).toBe('draw');
     expect(cycle.winner?.drawnFrom).toEqual(drawnFrom);
     const seed = cycle.votingClosedAt?.getTime() ?? 0;
-    expect(cycle.winner?.nominationId).toBe(drawnFrom[seed % 3]);
+    expect(cycle.winner?.nominationId).toBe(drawnFrom[drawNumber(seed) % 3]);
   });
 
   it('skips the vote when there is a single nomination', async () => {

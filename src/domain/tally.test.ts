@@ -64,12 +64,13 @@ describe('decide', () => {
 
   it("draws among the books still tied, in the ballot's order, by the closing time", () => {
     const tied = results({ a: 5, b: 5, c: 5 }, { a: 2, b: 2, c: 1 });
-    expect(decide(['c', 'b', 'a'], tied, 1_000)).toEqual({
+    // The closing times 0 and 1 give the numbers 9988 (even) and 10113 (odd).
+    expect(decide(['c', 'b', 'a'], tied, 0)).toEqual({
       nominationId: 'b',
       method: 'draw',
       drawnFrom: ['b', 'a'],
     });
-    expect(decide(['c', 'b', 'a'], tied, 1_001).nominationId).toBe('a');
+    expect(decide(['c', 'b', 'a'], tied, 1).nominationId).toBe('a');
   });
 
   it('treats a single nomination as unopposed', () => {

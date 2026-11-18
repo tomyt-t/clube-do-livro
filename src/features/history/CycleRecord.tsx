@@ -1,6 +1,7 @@
 import { useId } from 'react';
 
 import { splitTitle } from '@/domain/book';
+import { drawNumber } from '@/domain/draw';
 import type { Nomination } from '@/domain/types';
 import { CHOSEN } from '@/features/club/methods';
 import { useMemberCount, useNominations } from '@/features/club/use-club';
@@ -33,9 +34,11 @@ function DrawNote({ cycle, nominations }: { cycle: DecidedCycle; nominations: No
     <details className={styles.draw}>
       <summary>Como foi o sorteio</summary>
       <p>
-        Empataram em votos e em 1ª opção, nesta ordem fixa: {joinNames(drawnFrom.map(titleOf))}. A
-        votação fechou às {formatClosingTime(closedAt)}; esse instante em milissegundos, dividido
-        por {drawnFrom.length}, deixa resto {position - 1}, então venceu a {position}ª da lista.
+        Empataram em votos e em 1ª opção, nesta ordem da cédula: {joinNames(drawnFrom.map(titleOf))}
+        . O desempate foi um sorteio por número pseudoaleatório, gerado a partir do instante em que
+        a votação fechou ({formatClosingTime(closedAt)}). Saiu o {drawNumber(closedAt.getTime())},
+        que dividido por {drawnFrom.length} deixa resto {position - 1}, então venceu a {position}ª
+        da lista.
       </p>
     </details>
   );

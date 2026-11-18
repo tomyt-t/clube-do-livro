@@ -35,8 +35,9 @@ Toda a segurança está em [`firestore.rules`](firestore.rules), com testes de a
 - **Respostas, votos e marcas de leitura:** valem uma vez só e não podem ser editados nem
   apagados, nem por quem organiza.
 - **Vencedor:** precisa seguir a regra do clube, e o servidor confere.
-- **Sorteio:** não é escolhido por ninguém. Os empatados entram numa ordem fixa, e o vencedor
-  sai do milissegundo em que a votação fechou; as regras refazem a conta antes de aceitar.
+- **Sorteio:** não é escolhido por ninguém. Os empatados ficam na ordem da cédula, e um
+  número pseudoaleatório, gerado a partir do instante em que a votação fechou, escolhe o
+  vencedor; as regras refazem a conta antes de aceitar.
 
 ## Desenvolvimento
 

@@ -157,7 +157,7 @@ export async function seedVoting(env: RulesTestEnvironment, seed: VotingSeed = {
   );
 }
 
-/** A fixed closing time, so tests know which tied book a draw gives (index 1 of 2 or 3... ). */
+/** A fixed closing time, so tests know which tied book a draw gives. */
 export const CLOSED_AT = Timestamp.fromMillis(1_700_000_000_001);
 
 /** Voting closed; someone is about to declare the winner. */

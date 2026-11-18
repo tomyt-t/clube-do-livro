@@ -1,4 +1,4 @@
-import { drawOrder } from '@/domain/draw';
+import { drawOrder, drawWinner } from '@/domain/draw';
 import { cycleIdFor } from '@/domain/flow';
 import { finalists } from '@/domain/tally';
 import type { Cycle, DecisionMethod, VoteResults } from '@/domain/types';
@@ -46,15 +46,17 @@ function resultsOf(past: PastCycle): VoteResults {
 }
 
 /**
- * A draw is fixed by the closing time, so the demo picks a closing time that
- * really gives the seeded winner: anyone can check it like a real one.
+ * A draw is fixed by the closing time, so the demo picks the first closing
+ * time from `around` that really gives the seeded winner: anyone can check it
+ * like a real one.
  */
 function closingTimeFor(past: PastCycle, around: Date): Date {
   if (past.method !== 'draw') return around;
   const options = Object.keys(past.results);
-  const order = drawOrder(finalists(options, resultsOf(past)), options);
-  const ms = around.getTime();
-  return new Date(ms - (ms % order.length) + order.indexOf(past.winner));
+  const tied = finalists(options, resultsOf(past));
+  let ms = around.getTime();
+  while (drawWinner(tied, options, ms) !== past.winner) ms += 1;
+  return new Date(ms);
 }
 
 function pastCycle(now: Date, past: PastCycle): Cycle {

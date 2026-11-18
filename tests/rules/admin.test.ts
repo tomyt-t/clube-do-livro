@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { drawWinner } from '@/domain/draw';
 import type { DecisionMethod, NominationId, VoteResults } from '@/domain/types';
 import {
   deleteCycle,
@@ -35,6 +36,7 @@ import {
   ana,
   bia,
   bookFor,
+  CLOSED_AT,
   createEnv,
   cycleData,
   CYCLE,
@@ -303,18 +305,19 @@ describe('ties', () => {
 
   it('still tied, go to a draw fixed by the closing time', async () => {
     const results = await closedWith({ [N_ANA]: [3, 2], [N_BIA]: [3, 2], [N_ADMIN]: [2, 0] });
-    // The tied books in the ballot's order; closed at an odd millisecond, so index 1 of 2 wins.
+    // The tied books in the ballot's order; the closing time's number picks the first of 2.
     const drawnFrom = [N_ANA, N_BIA];
+    expect(drawWinner(drawnFrom, ALL_NOMINATIONS, CLOSED_AT.toMillis())).toBe(N_ANA);
     const draw = (nominationId: NominationId, list: NominationId[]) =>
       declare({ nominationId, method: 'draw', results, drawnFrom: list });
 
     await assertFails(declare({ nominationId: N_ANA, method: 'first-choices', results }));
-    await assertFails(draw(N_ANA, drawnFrom));
+    await assertFails(draw(N_BIA, drawnFrom));
     await assertFails(draw(N_BIA, [N_BIA, N_ANA]));
-    await assertFails(draw(N_BIA, [N_ANA, N_BIA, N_ADMIN]));
-    await assertFails(draw(N_BIA, [N_BIA]));
+    await assertFails(draw(N_ANA, [N_ANA, N_BIA, N_ADMIN]));
+    await assertFails(draw(N_ANA, [N_ANA]));
     await assertFails(draw(N_ADMIN, [N_ADMIN, N_BIA]));
-    await assertSucceeds(draw(N_BIA, drawnFrom));
+    await assertSucceeds(draw(N_ANA, drawnFrom));
   });
 });
 

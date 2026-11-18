@@ -56,11 +56,11 @@ describe('HistoryPage', () => {
     const round = await record('Cem Anos de Solidão');
 
     expect(round.getByText('Como foi o sorteio')).toBeInTheDocument();
-    expect(
-      await round.findByText(
-        /nesta ordem fixa: O Avesso da Pele, Cem Anos de Solidão e Quarto de Despejo/,
-      ),
-    ).toHaveTextContent('deixa resto 1, então venceu a 2ª da lista');
+    const note = await round.findByText(
+      /nesta ordem da cédula: O Avesso da Pele, Cem Anos de Solidão e Quarto de Despejo/,
+    );
+    expect(note).toHaveTextContent('sorteio por número pseudoaleatório');
+    expect(note).toHaveTextContent('deixa resto 1, então venceu a 2ª da lista');
   });
 
   it('opens a round from the shelf', async () => {
