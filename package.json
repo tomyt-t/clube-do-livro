@@ -20,7 +20,8 @@
     "prepare": "husky",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-clube-do-livro \"vitest run --config vitest.rules.config.ts\""
+    "test:rules": "firebase emulators:exec --only firestore --project demo-clube-do-livro \"vitest run --config vitest.rules.config.ts\"",
+    "dev:demo": "vite --mode demo"
   },
   "dependencies": {
     "firebase": "12.19.0",
