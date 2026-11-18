@@ -15,7 +15,7 @@ export type AppConfig =
   | (SharedConfig & {
       mode: 'firebase';
       firebase: FirebaseConfig;
-      /** reCAPTCHA v3 site key; enables Firebase App Check when present. */
+      /** Fraud Defense (reCAPTCHA Enterprise) site key; enables Firebase App Check when present. */
       appCheckSiteKey: string | null;
       /**
        * Gemini model for the duplicate check (Firebase AI Logic). AI Logic does

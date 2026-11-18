@@ -159,9 +159,12 @@ protege.
 
 O App Check impede que scripts fora do site usem o seu projeto Firebase.
 
-1. Crie uma chave do **reCAPTCHA v3** em <https://www.google.com/recaptcha/admin>, com o domínio
-   `<seu-usuario>.github.io`.
-2. Em **Firebase → App Check**, registre o app da Web com essa chave.
+1. No Google Cloud Console do projeto, abra **Segurança → Fraud Defense** (o antigo reCAPTCHA
+   Enterprise; o reCAPTCHA v3 clássico não é mais aceito pelo App Check) e crie uma chave para
+   **Website**, baseada em pontuação, com o domínio `<seu-usuario>.github.io`. Não precisa de
+   cobrança: são 10 mil verificações grátis por mês e, sem cobrança, ele só dá erro depois disso.
+2. Em **Firebase → App Check**, registre o app da Web com o provedor **Fraud Defense** e essa
+   chave de site. Ele não pede chave secreta.
 3. Salve a chave de site na variável `VITE_APPCHECK_SITE_KEY` e publique.
 4. Quando as métricas do App Check mostrarem só tráfego verificado, ative a **aplicação
    (enforcement)** para o Firestore, o Authentication e, se usar a conferência, o Firebase AI

@@ -1,5 +1,5 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import {
   browserLocalPersistence,
   browserPopupRedirectResolver,
@@ -23,9 +23,11 @@ export function initFirebase(
 ): FirebaseServices {
   const app = initializeApp(config);
 
+  // Google Cloud Fraud Defense (formerly reCAPTCHA Enterprise): the only
+  // provider App Check still takes on the web; it needs no secret key.
   if (appCheckSiteKey) {
     initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(appCheckSiteKey),
+      provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
       isTokenAutoRefreshEnabled: true,
     });
   }
