@@ -7,6 +7,9 @@
     "moduleResolution": "bundler",
     "moduleDetection": "force",
     "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
@@ -20,5 +23,5 @@
     "noFallthroughCasesInSwitch": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "vitest.rules.config.ts", "tests"]
 }

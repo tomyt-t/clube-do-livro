@@ -19,14 +19,17 @@
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
     "prepare": "husky",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-clube-do-livro \"vitest run --config vitest.rules.config.ts\""
   },
   "dependencies": {
+    "firebase": "12.19.0",
     "react": "19.2.9",
     "react-dom": "19.2.9"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
+    "@firebase/rules-unit-testing": "5.0.2",
     "@types/node": "24.19.2",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
@@ -36,6 +39,7 @@
     "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.8",
+    "firebase-tools": "15.34.2",
     "globals": "16.5.0",
     "husky": "9.1.7",
     "lint-staged": "17.6.0",

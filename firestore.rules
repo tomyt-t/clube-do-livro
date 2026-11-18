@@ -1,0 +1,523 @@
+rules_version = '2';
+
+// Security model
+// --------------
+// * Only verified emails present in /allowlist can read or write anything.
+// * Member data is bound to request.auth.uid and is create-only: answers,
+//   nominations and ballot receipts can never be edited or deleted, so nobody
+//   (including the admin) can change what another member sent.
+// * Votes are anonymous: a ballot is one batch that creates an empty receipt
+//   (who voted), bumps the round's ballot count and adds +1 to the chosen
+//   options in a tally that nobody can read until the round is closed.
+//   Nothing links a member to their choices.
+// * Admin writes follow a state machine and cannot touch tallies.
+// * Everything not explicitly allowed is denied.
+//
+// Limits shared with src/domain: book fields (book.ts) and 30 options per
+// round (voting.ts). Rules have no loops, so list checks are unrolled.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- identity
+
+    function email() {
+      return request.auth.token.email.lower();
+    }
+
+    function allowlistEntry() {
+      return /databases/$(database)/documents/allowlist/$(email());
+    }
+
+    function isVerified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isMember() {
+      return isVerified() && exists(allowlistEntry());
+    }
+
+    function isAdmin() {
+      return isMember() && get(allowlistEntry()).data.get('admin', false) == true;
+    }
+
+    function isSelf(uid) {
+      return request.auth.uid == uid;
+    }
+
+    // ------------------------------------------------------------------ paths
+
+    function cyclePath(c) {
+      return /databases/$(database)/documents/cycles/$(c);
+    }
+
+    function nominationPath(c, n) {
+      return /databases/$(database)/documents/cycles/$(c)/nominations/$(n);
+    }
+
+    function answerPath(c) {
+      return /databases/$(database)/documents/cycles/$(c)/answers/$(request.auth.uid);
+    }
+
+    function roundPath(c, r) {
+      return /databases/$(database)/documents/cycles/$(c)/rounds/$(r);
+    }
+
+    function tallyPath(c, r) {
+      return /databases/$(database)/documents/cycles/$(c)/rounds/$(r)/tally/counts;
+    }
+
+    function receiptPath(c, r) {
+      return /databases/$(database)/documents/cycles/$(c)/rounds/$(r)/receipts/$(request.auth.uid);
+    }
+
+    // ------------------------------------------------------------- validation
+
+    function hasExactly(data, keys) {
+      return data.keys().hasAll(keys) && data.keys().hasOnly(keys);
+    }
+
+    function changesOnly(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    function isText(value, min, max) {
+      return value is string && value.size() >= min && value.size() <= max;
+    }
+
+    // Links are stored URL-encoded (printable ASCII, no spaces).
+    function isLink(value) {
+      return value is string && value.size() <= 1000 && value.matches('https://[!-~]+');
+    }
+
+    function isUploadedCover(value) {
+      return value is string && value.size() <= 200000
+        && value.matches('data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*');
+    }
+
+    function isOptionalTime(value) {
+      return value == null || value is timestamp;
+    }
+
+    function isOptionalInt(value, max) {
+      return value == null || (value is int && value >= 0 && value <= max);
+    }
+
+    function isAuthorAt(authors, i) {
+      return i >= authors.size() || isText(authors[i], 1, 120);
+    }
+
+    function isAuthorList(authors) {
+      return authors is list && authors.size() <= 10
+        && isAuthorAt(authors, 0) && isAuthorAt(authors, 1) && isAuthorAt(authors, 2)
+        && isAuthorAt(authors, 3) && isAuthorAt(authors, 4) && isAuthorAt(authors, 5)
+        && isAuthorAt(authors, 6) && isAuthorAt(authors, 7) && isAuthorAt(authors, 8)
+        && isAuthorAt(authors, 9);
+    }
+
+    function isBook(book) {
+      return book is map
+        && hasExactly(book, ['title', 'authors', 'synopsis', 'synopsisUrl', 'coverUrl',
+                             'publishedYear', 'pageCount'])
+        && isText(book.title, 1, 200)
+        && isAuthorList(book.authors)
+        && isText(book.synopsis, 0, 4000)
+        && (book.synopsisUrl == null || isLink(book.synopsisUrl))
+        && (book.coverUrl == null || isLink(book.coverUrl) || isUploadedCover(book.coverUrl))
+        && isOptionalInt(book.publishedYear, 3000)
+        && isOptionalInt(book.pageCount, 100000);
+    }
+
+    function isBeforeDeadline(deadline) {
+      return deadline == null || request.time < deadline;
+    }
+
+    // -------------------------------------------------------------- allowlist
+    // Document id = lowercase email. Members can only check their own entry;
+    // only the admin can list or change entries, never their own.
+
+    match /allowlist/{address} {
+      allow get: if isVerified() && address == email();
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && address != email()
+        && address == address.lower()
+        && address.matches('[^@ ]+@[^@ ]+[.][^@ ]+')
+        && request.resource.data.keys().hasOnly(['admin'])
+        && request.resource.data.get('admin', false) is bool;
+      allow delete: if isAdmin() && address != email();
+    }
+
+    // ---------------------------------------------------------------- members
+    // Public profile inside the club: name and photo only, never the email.
+
+    match /members/{uid} {
+      allow read: if isMember();
+      allow create, update: if isMember() && isSelf(uid)
+        && hasExactly(request.resource.data, ['name', 'photoURL'])
+        && isText(request.resource.data.name, 1, 80)
+        && (request.resource.data.photoURL == null || isLink(request.resource.data.photoURL));
+    }
+
+    // ----------------------------------------------------------------- cycles
+
+    match /cycles/{cycleId} {
+      allow read: if isMember();
+      allow create: if isAdmin() && isNewCycle(request.resource.data);
+      allow update: if (isMember() && countsOwnAnswer(cycleId))
+        || (isAdmin() && isValidTransition(cycleId, resource.data, request.resource.data));
+      // A cycle can be dropped only before any vote exists.
+      allow delete: if isAdmin() && resource.data.status == 'nominating';
+
+      // ---------------------------------------------------------- answers
+      // One per member and final: either a nomination id or null (passed).
+
+      match /answers/{uid} {
+        allow get: if isMember() && isSelf(uid);
+        allow create: if isMember() && isSelf(uid) && isNewAnswer(cycleId);
+      }
+
+      // ------------------------------------------------------ nominations
+      // Never stores who nominated. Created only together with the
+      // nominator's own answer pointing at it.
+
+      match /nominations/{nominationId} {
+        allow read: if isMember();
+        allow create: if isMember() && isNewNomination(cycleId, nominationId);
+      }
+
+      // ----------------------------------------------------------- rounds
+
+      match /rounds/{roundId} {
+        allow read: if isMember();
+        allow create: if isAdmin() && isNewRound(cycleId, roundId, request.resource.data);
+        allow update: if (isMember() && countsOwnBallot(cycleId, roundId))
+          || (isAdmin() && closesRound(cycleId, roundId))
+          || (isAdmin() && recordsResults(cycleId, roundId));
+
+        match /receipts/{uid} {
+          allow get: if isMember() && isSelf(uid);
+          allow create: if isMember() && isSelf(uid) && isNewReceipt(cycleId, roundId);
+        }
+
+        match /tally/{docId} {
+          allow get: if isMember() && docId == 'counts'
+            && get(roundPath(cycleId, roundId)).data.status == 'closed';
+          allow create: if isAdmin() && docId == 'counts' && isNewTally(cycleId, roundId);
+          allow update: if isMember() && docId == 'counts' && isValidVote(cycleId, roundId);
+        }
+      }
+    }
+
+    // ------------------------------------------------------ nomination writes
+    // Batch: answers/{uid} + cycles/{id}.responses (+1) [+ nominations/{id}]
+
+    function acceptsNominations(c) {
+      let cycle = get(cyclePath(c)).data;
+      return cycle.status == 'nominating' && isBeforeDeadline(cycle.nominationDeadline);
+    }
+
+    function isAnsweringNow(c) {
+      return !exists(answerPath(c)) && existsAfter(answerPath(c));
+    }
+
+    function countsOwnAnswer(c) {
+      return resource.data.status == 'nominating'
+        && changesOnly(['responses'])
+        && request.resource.data.responses == resource.data.responses + 1
+        && isAnsweringNow(c);
+    }
+
+    function isNewAnswer(c) {
+      let answer = request.resource.data;
+      return acceptsNominations(c)
+        && hasExactly(answer, ['nominationId'])
+        && getAfter(cyclePath(c)).data.responses == get(cyclePath(c)).data.responses + 1
+        && (answer.nominationId == null
+          || (answer.nominationId is string
+            && !exists(nominationPath(c, answer.nominationId))
+            && existsAfter(nominationPath(c, answer.nominationId))));
+    }
+
+    function isNewNomination(c, n) {
+      return acceptsNominations(c)
+        && hasExactly(request.resource.data, ['book'])
+        && isBook(request.resource.data.book)
+        && isAnsweringNow(c)
+        && getAfter(answerPath(c)).data.nominationId == n;
+    }
+
+    // ------------------------------------------------------------ ballot writes
+    // Batch: receipts/{uid} (empty) + rounds/{n}.ballots (+1) + tally (+1 each)
+
+    function isVotingNow(c, r) {
+      return !exists(receiptPath(c, r)) && existsAfter(receiptPath(c, r));
+    }
+
+    function isNewReceipt(c, r) {
+      return request.resource.data.keys().size() == 0
+        && getAfter(roundPath(c, r)).data.ballots == get(roundPath(c, r)).data.ballots + 1;
+    }
+
+    function countsOwnBallot(c, r) {
+      let cycle = get(cyclePath(c)).data;
+      return resource.data.status == 'open'
+        && cycle.status == 'voting'
+        && isBeforeDeadline(cycle.votingDeadline)
+        && changesOnly(['ballots'])
+        && request.resource.data.ballots == resource.data.ballots + 1
+        && isVotingNow(c, r)
+        && getAfter(tallyPath(c, r)).data.counts != get(tallyPath(c, r)).data.counts;
+    }
+
+    // The member's own nomination, or '' (never a valid option id).
+    function ownNomination(c) {
+      return exists(answerPath(c)) ? get(answerPath(c)).data.nominationId : '';
+    }
+
+    function requiredChoices(round, own) {
+      let excluded = round.kind == 'first' && own in round.options ? 1 : 0;
+      let eligible = round.options.size() - excluded;
+      return eligible < round.votesPerMember ? eligible : round.votesPerMember;
+    }
+
+    // Each option either keeps its count or gains exactly one vote.
+    function isStepAt(options, before, after, i) {
+      return i >= options.size()
+        || after[options[i]] == before[options[i]]
+        || after[options[i]] == before[options[i]] + 1;
+    }
+
+    function isStepOnly(o, b, a) {
+      return isStepAt(o, b, a, 0) && isStepAt(o, b, a, 1) && isStepAt(o, b, a, 2)
+        && isStepAt(o, b, a, 3) && isStepAt(o, b, a, 4) && isStepAt(o, b, a, 5)
+        && isStepAt(o, b, a, 6) && isStepAt(o, b, a, 7) && isStepAt(o, b, a, 8)
+        && isStepAt(o, b, a, 9) && isStepAt(o, b, a, 10) && isStepAt(o, b, a, 11)
+        && isStepAt(o, b, a, 12) && isStepAt(o, b, a, 13) && isStepAt(o, b, a, 14)
+        && isStepAt(o, b, a, 15) && isStepAt(o, b, a, 16) && isStepAt(o, b, a, 17)
+        && isStepAt(o, b, a, 18) && isStepAt(o, b, a, 19) && isStepAt(o, b, a, 20)
+        && isStepAt(o, b, a, 21) && isStepAt(o, b, a, 22) && isStepAt(o, b, a, 23)
+        && isStepAt(o, b, a, 24) && isStepAt(o, b, a, 25) && isStepAt(o, b, a, 26)
+        && isStepAt(o, b, a, 27) && isStepAt(o, b, a, 28) && isStepAt(o, b, a, 29);
+    }
+
+    function isValidVote(c, r) {
+      let round = get(roundPath(c, r)).data;
+      let before = resource.data.counts;
+      let after = request.resource.data.counts;
+      let diff = after.diff(before);
+      let own = ownNomination(c);
+      return round.status == 'open'
+        && hasExactly(request.resource.data, ['counts'])
+        && diff.addedKeys().size() == 0
+        && diff.removedKeys().size() == 0
+        && diff.changedKeys().size() == requiredChoices(round, own)
+        && (round.kind == 'runoff' || !diff.changedKeys().hasAny([own]))
+        && isStepOnly(round.options, before, after)
+        && isVotingNow(c, r);
+    }
+
+    // ------------------------------------------------------------- admin: rounds
+    // Batch: cycles/{id} (status/currentRound) + rounds/{n} + tally (all zero)
+
+    function hasDistinctOptions(options) {
+      return options is list && options.size() >= 1 && options.size() <= 30
+        && options.toSet().size() == options.size();
+    }
+
+    // `leaders` must be exactly the options tied at the top of `round`.
+    function isLeaderSlot(round, leaders, top, i) {
+      return i >= round.options.size()
+        || (round.options[i] in leaders
+          ? round.results[round.options[i]] == top
+          : round.results[round.options[i]] < top);
+    }
+
+    function areExactlyTheLeaders(round, leaders) {
+      let t = round.results[leaders[0]];
+      return isLeaderSlot(round, leaders, t, 0) && isLeaderSlot(round, leaders, t, 1)
+        && isLeaderSlot(round, leaders, t, 2) && isLeaderSlot(round, leaders, t, 3)
+        && isLeaderSlot(round, leaders, t, 4) && isLeaderSlot(round, leaders, t, 5)
+        && isLeaderSlot(round, leaders, t, 6) && isLeaderSlot(round, leaders, t, 7)
+        && isLeaderSlot(round, leaders, t, 8) && isLeaderSlot(round, leaders, t, 9)
+        && isLeaderSlot(round, leaders, t, 10) && isLeaderSlot(round, leaders, t, 11)
+        && isLeaderSlot(round, leaders, t, 12) && isLeaderSlot(round, leaders, t, 13)
+        && isLeaderSlot(round, leaders, t, 14) && isLeaderSlot(round, leaders, t, 15)
+        && isLeaderSlot(round, leaders, t, 16) && isLeaderSlot(round, leaders, t, 17)
+        && isLeaderSlot(round, leaders, t, 18) && isLeaderSlot(round, leaders, t, 19)
+        && isLeaderSlot(round, leaders, t, 20) && isLeaderSlot(round, leaders, t, 21)
+        && isLeaderSlot(round, leaders, t, 22) && isLeaderSlot(round, leaders, t, 23)
+        && isLeaderSlot(round, leaders, t, 24) && isLeaderSlot(round, leaders, t, 25)
+        && isLeaderSlot(round, leaders, t, 26) && isLeaderSlot(round, leaders, t, 27)
+        && isLeaderSlot(round, leaders, t, 28) && isLeaderSlot(round, leaders, t, 29);
+    }
+
+    function isFirstRound(round) {
+      return round.kind == 'first' && round.number == 1 && round.votesPerMember == 2;
+    }
+
+    function isRunoffAfter(c, round) {
+      let previous = get(roundPath(c, string(round.number - 1))).data;
+      return round.kind == 'runoff' && round.number > 1 && round.votesPerMember == 1
+        && previous.status == 'closed' && previous.results != null
+        && round.options.size() >= 2
+        && previous.options.hasAll(round.options)
+        && areExactlyTheLeaders(previous, round.options);
+    }
+
+    function isNewRound(c, r, round) {
+      let cycle = getAfter(cyclePath(c)).data;
+      return hasExactly(round, ['number', 'kind', 'options', 'votesPerMember', 'status',
+                                'ballots', 'openedAt', 'closedAt', 'results'])
+        && round.number is int && string(round.number) == r
+        && cycle.status == 'voting' && cycle.currentRound == round.number
+        && round.status == 'open' && round.ballots == 0 && round.openedAt == request.time
+        && round.closedAt == null && round.results == null
+        && hasDistinctOptions(round.options)
+        && round.options.size() <= cycle.responses
+        && existsAfter(tallyPath(c, r))
+        && (isFirstRound(round) || isRunoffAfter(c, round));
+    }
+
+    function isNewTally(c, r) {
+      let options = getAfter(roundPath(c, r)).data.options;
+      let counts = request.resource.data.counts;
+      return hasExactly(request.resource.data, ['counts'])
+        && counts is map
+        && counts.keys().hasAll(options) && counts.keys().hasOnly(options)
+        && counts.values().hasOnly([0]);
+    }
+
+    function closesRound(c, r) {
+      return resource.data.status == 'open'
+        && request.resource.data.status == 'closed'
+        && request.resource.data.closedAt == request.time
+        && changesOnly(['status', 'closedAt'])
+        && get(cyclePath(c)).data.currentRound == int(r);
+    }
+
+    function recordsResults(c, r) {
+      return resource.data.status == 'closed'
+        && resource.data.results == null
+        && changesOnly(['results'])
+        && request.resource.data.results == get(tallyPath(c, r)).data.counts;
+    }
+
+    // ------------------------------------------------------------- admin: cycles
+
+    function isNewCycle(cycle) {
+      return hasExactly(cycle, ['number', 'status', 'currentRound', 'responses',
+                                'nominationDeadline', 'votingDeadline', 'createdAt', 'winner',
+                                'readingStartedAt', 'finishedAt'])
+        && cycle.number is int && cycle.number >= 1
+        && cycle.status == 'nominating'
+        && cycle.currentRound == 0 && cycle.responses == 0
+        && isOptionalTime(cycle.nominationDeadline) && cycle.votingDeadline == null
+        && cycle.createdAt == request.time
+        && cycle.winner == null && cycle.readingStartedAt == null && cycle.finishedAt == null;
+    }
+
+    function editsDeadline(before, after) {
+      return (before.status == 'nominating' && changesOnly(['nominationDeadline'])
+          && isOptionalTime(after.nominationDeadline))
+        || (before.status == 'voting' && changesOnly(['votingDeadline'])
+          && isOptionalTime(after.votingDeadline));
+    }
+
+    function startsVoting(c, before, after) {
+      return before.status == 'nominating' && after.status == 'voting'
+        && after.currentRound == 1
+        && changesOnly(['status', 'currentRound', 'votingDeadline'])
+        && isOptionalTime(after.votingDeadline)
+        && existsAfter(roundPath(c, '1'));
+    }
+
+    function opensRunoff(c, before, after) {
+      return before.status == 'voting' && after.status == 'voting'
+        && after.currentRound == before.currentRound + 1
+        && changesOnly(['currentRound', 'votingDeadline'])
+        && isOptionalTime(after.votingDeadline)
+        && existsAfter(roundPath(c, string(after.currentRound)));
+    }
+
+    function entersTiebreak(c, before, after) {
+      let round = get(roundPath(c, string(before.currentRound))).data;
+      return before.status == 'voting' && after.status == 'tiebreak'
+        && changesOnly(['status'])
+        && round.kind == 'runoff' && round.status == 'closed' && round.results != null;
+    }
+
+    // The winner has more votes than every other option (strict),
+    // or at least as many (draw among the tied).
+    function beatsSlot(round, winner, strict, i) {
+      return i >= round.options.size() || round.options[i] == winner
+        || (strict
+          ? round.results[round.options[i]] < round.results[winner]
+          : round.results[round.options[i]] <= round.results[winner]);
+    }
+
+    function leads(round, w, strict) {
+      return beatsSlot(round, w, strict, 0) && beatsSlot(round, w, strict, 1)
+        && beatsSlot(round, w, strict, 2) && beatsSlot(round, w, strict, 3)
+        && beatsSlot(round, w, strict, 4) && beatsSlot(round, w, strict, 5)
+        && beatsSlot(round, w, strict, 6) && beatsSlot(round, w, strict, 7)
+        && beatsSlot(round, w, strict, 8) && beatsSlot(round, w, strict, 9)
+        && beatsSlot(round, w, strict, 10) && beatsSlot(round, w, strict, 11)
+        && beatsSlot(round, w, strict, 12) && beatsSlot(round, w, strict, 13)
+        && beatsSlot(round, w, strict, 14) && beatsSlot(round, w, strict, 15)
+        && beatsSlot(round, w, strict, 16) && beatsSlot(round, w, strict, 17)
+        && beatsSlot(round, w, strict, 18) && beatsSlot(round, w, strict, 19)
+        && beatsSlot(round, w, strict, 20) && beatsSlot(round, w, strict, 21)
+        && beatsSlot(round, w, strict, 22) && beatsSlot(round, w, strict, 23)
+        && beatsSlot(round, w, strict, 24) && beatsSlot(round, w, strict, 25)
+        && beatsSlot(round, w, strict, 26) && beatsSlot(round, w, strict, 27)
+        && beatsSlot(round, w, strict, 28) && beatsSlot(round, w, strict, 29);
+    }
+
+    function isEarnedWin(before, winner, round) {
+      return (winner.method == 'votes' && before.status == 'voting'
+          && leads(round, winner.nominationId, true))
+        || (winner.method == 'draw' && before.status == 'tiebreak'
+          && leads(round, winner.nominationId, false))
+        || (winner.method == 'unopposed' && before.status == 'voting'
+          && round.options.size() == 1);
+    }
+
+    function declaresWinner(c, before, after) {
+      let winner = after.winner;
+      let round = get(roundPath(c, string(before.currentRound))).data;
+      return before.winner == null
+        && changesOnly(['status', 'winner', 'readingStartedAt'])
+        && ((after.status == 'reading' && after.readingStartedAt == request.time)
+          || (after.status == 'upcoming' && after.readingStartedAt == null))
+        && winner is map
+        && hasExactly(winner, ['nominationId', 'book', 'method', 'decidedAt'])
+        && winner.decidedAt == request.time
+        && round.status == 'closed' && round.results != null
+        && winner.nominationId in round.options
+        && winner.book == get(nominationPath(c, winner.nominationId)).data.book
+        && isEarnedWin(before, winner, round);
+    }
+
+    function startsReading(before, after) {
+      return before.status == 'upcoming' && after.status == 'reading'
+        && changesOnly(['status', 'readingStartedAt'])
+        && after.readingStartedAt == request.time;
+    }
+
+    function finishesReading(before, after) {
+      return before.status == 'reading' && after.status == 'finished'
+        && changesOnly(['status', 'finishedAt'])
+        && after.finishedAt == request.time;
+    }
+
+    function isValidTransition(c, before, after) {
+      return editsDeadline(before, after)
+        || startsVoting(c, before, after)
+        || opensRunoff(c, before, after)
+        || entersTiebreak(c, before, after)
+        || declaresWinner(c, before, after)
+        || startsReading(before, after)
+        || finishesReading(before, after);
+    }
+  }
+}

@@ -1,0 +1,160 @@
+import { readFileSync } from 'node:fs';
+
+import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
+import { doc, setDoc, Timestamp, type Firestore } from 'firebase/firestore';
+
+import type { Book, NominationId } from '@/domain/types';
+import { makeBook } from '@/test/factories';
+
+export interface Persona {
+  uid: string;
+  email: string;
+}
+
+export const admin: Persona = { uid: 'admin-uid', email: 'admin@example.com' };
+export const ana: Persona = { uid: 'ana-uid', email: 'ana@example.com' };
+export const bia: Persona = { uid: 'bia-uid', email: 'bia@example.com' };
+/** Mixed-case email: the allowlist entry is lowercase. */
+export const caio: Persona = { uid: 'caio-uid', email: 'Caio@Example.com' };
+/** Verified Google account that is not on the allowlist. */
+export const stranger: Persona = { uid: 'stranger-uid', email: 'stranger@example.com' };
+
+export const CYCLE = 'cycle-1';
+export const N_ANA: NominationId = 'nomination-ana';
+export const N_BIA: NominationId = 'nomination-bia';
+export const N_ADMIN: NominationId = 'nomination-admin';
+export const ALL_NOMINATIONS = [N_ANA, N_BIA, N_ADMIN];
+
+export const PAST = Timestamp.fromDate(new Date('2020-01-01T00:00:00Z'));
+
+export function createEnv(): Promise<RulesTestEnvironment> {
+  return initializeTestEnvironment({
+    projectId: 'demo-clube-do-livro',
+    firestore: { rules: readFileSync('firestore.rules', 'utf8') },
+  });
+}
+
+// rules-unit-testing hands out the compat Firestore; the modular API accepts
+// it at runtime (it unwraps `_delegate`), so the casts are type-only.
+
+export function dbAs(env: RulesTestEnvironment, persona: Persona, verified = true): Firestore {
+  const context = env.authenticatedContext(persona.uid, {
+    email: persona.email,
+    email_verified: verified,
+  });
+  return context.firestore() as unknown as Firestore;
+}
+
+export function guestDb(env: RulesTestEnvironment): Firestore {
+  return env.unauthenticatedContext().firestore() as unknown as Firestore;
+}
+
+export async function withoutRules(
+  env: RulesTestEnvironment,
+  write: (db: Firestore) => Promise<unknown>,
+) {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await write(context.firestore() as unknown as Firestore);
+  });
+}
+
+export function bookFor(nominationId: NominationId): Book {
+  return makeBook({ title: `Livro ${nominationId}` });
+}
+
+export function cycleData(overrides: Record<string, unknown> = {}) {
+  return {
+    number: 1,
+    status: 'nominating',
+    currentRound: 0,
+    responses: 0,
+    nominationDeadline: null,
+    votingDeadline: null,
+    createdAt: Timestamp.now(),
+    winner: null,
+    readingStartedAt: null,
+    finishedAt: null,
+    ...overrides,
+  };
+}
+
+export async function seedAllowlist(env: RulesTestEnvironment) {
+  await withoutRules(env, async (db) => {
+    await setDoc(doc(db, 'allowlist', admin.email), { admin: true });
+    await setDoc(doc(db, 'allowlist', ana.email), {});
+    await setDoc(doc(db, 'allowlist', bia.email), {});
+    await setDoc(doc(db, 'allowlist', caio.email.toLowerCase()), {});
+  });
+}
+
+/** An empty cycle collecting nominations. */
+export async function seedNominating(env: RulesTestEnvironment, cycle = {}) {
+  await seedAllowlist(env);
+  await withoutRules(env, (db) => setDoc(doc(db, 'cycles', CYCLE), cycleData(cycle)));
+}
+
+/** Everyone answered: ana, bia and admin nominated; caio passed. */
+export async function seedAnswered(env: RulesTestEnvironment, cycle = {}) {
+  await seedAllowlist(env);
+  await withoutRules(env, async (db) => {
+    await setDoc(doc(db, 'cycles', CYCLE), cycleData({ responses: 4, ...cycle }));
+    const nominators: [Persona, NominationId][] = [
+      [ana, N_ANA],
+      [bia, N_BIA],
+      [admin, N_ADMIN],
+    ];
+    for (const [persona, nominationId] of nominators) {
+      await setDoc(doc(db, 'cycles', CYCLE, 'nominations', nominationId), {
+        book: bookFor(nominationId),
+      });
+      await setDoc(doc(db, 'cycles', CYCLE, 'answers', persona.uid), { nominationId });
+    }
+    await setDoc(doc(db, 'cycles', CYCLE, 'answers', caio.uid), { nominationId: null });
+  });
+}
+
+interface RoundSeed {
+  number?: number;
+  kind?: 'first' | 'runoff';
+  options?: NominationId[];
+  status?: 'open' | 'closed';
+  /** Tally counts; defaults to zero for every option. */
+  counts?: Record<string, number>;
+  /** Copy the counts into `results` (as `recordResults` does). */
+  withResults?: boolean;
+}
+
+export async function seedRound(env: RulesTestEnvironment, seed: RoundSeed = {}) {
+  const { number = 1, kind = 'first', options = ALL_NOMINATIONS, status = 'open' } = seed;
+  const counts = seed.counts ?? Object.fromEntries(options.map((option) => [option, 0]));
+  await withoutRules(env, async (db) => {
+    await setDoc(doc(db, 'cycles', CYCLE, 'rounds', String(number)), {
+      number,
+      kind,
+      options,
+      votesPerMember: kind === 'first' ? 2 : 1,
+      status,
+      ballots: 0,
+      openedAt: Timestamp.now(),
+      closedAt: status === 'closed' ? Timestamp.now() : null,
+      results: seed.withResults ? counts : null,
+    });
+    await setDoc(doc(db, 'cycles', CYCLE, 'rounds', String(number), 'tally', 'counts'), {
+      counts,
+    });
+  });
+}
+
+/** Round 1 open for votes after everyone answered. */
+export async function seedVoting(
+  env: RulesTestEnvironment,
+  options: { cycle?: Record<string, unknown>; round?: RoundSeed } = {},
+) {
+  const round = options.round ?? {};
+  await seedAnswered(env, {
+    status: 'voting',
+    currentRound: round.number ?? 1,
+    ...options.cycle,
+  });
+  await seedRound(env, round);
+}

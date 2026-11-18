@@ -1,0 +1,15 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "nominations",
+      "fieldPath": "book",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "cycles",
+      "fieldPath": "winner",
+      "indexes": []
+    }
+  ]
+}
