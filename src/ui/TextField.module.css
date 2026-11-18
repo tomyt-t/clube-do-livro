@@ -19,6 +19,18 @@
   transition: border-color var(--duration-fast) var(--ease-out);
 }
 
+.area {
+  min-block-size: 9rem;
+  padding: 0.75rem 0.875rem;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.input:disabled {
+  color: var(--ink-2);
+  cursor: progress;
+}
+
 .input:hover {
   border-color: var(--ink-2);
 }

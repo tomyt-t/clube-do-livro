@@ -6,7 +6,7 @@ import type { Cycle } from '@/domain/types';
 import { useMember } from '@/features/auth/session';
 import { useHasVoted, useOwnAnswer } from '@/features/club/use-club';
 import { LinkButton } from '@/ui/Button';
-import { formatWeekday } from '@/ui/format';
+import { peopleWho, RESPONDED, until, VOTED } from '@/ui/format';
 
 import { nextReadingOf, type NextReading } from './next-reading';
 import styles from './NextReadingSection.module.css';
@@ -28,32 +28,6 @@ function Line({ headline, details = [], action }: LineProps) {
       {action}
     </div>
   );
-}
-
-/** "Até sábado, 21 de nov." (the month abbreviation already ends the sentence). */
-function until(deadline: Date | null): string | null {
-  if (!deadline) return null;
-  const day = formatWeekday(deadline);
-  return `Até ${day}${day.endsWith('.') ? '' : '.'}`;
-}
-
-interface Verb {
-  one: string;
-  many: string;
-  nobody: string;
-}
-
-const RESPONDED: Verb = {
-  one: 'respondeu',
-  many: 'responderam',
-  nobody: 'Ninguém respondeu ainda.',
-};
-const VOTED: Verb = { one: 'votou', many: 'votaram', nobody: 'Ninguém votou ainda.' };
-
-/** "Ninguém votou ainda.", "1 pessoa votou.", "3 pessoas votaram." */
-function peopleWho(count: number, verb: Verb): string {
-  if (count === 0) return verb.nobody;
-  return count === 1 ? `1 pessoa ${verb.one}.` : `${String(count)} pessoas ${verb.many}.`;
 }
 
 function ElectionLink({ done, label }: { done: boolean; label: string }) {

@@ -4,6 +4,7 @@ import { makeBook } from '@/test/factories';
 
 import {
   BOOK_LIMITS,
+  byTitle,
   isUploadedCover,
   normalizeBook,
   normalizeSynopsis,
@@ -130,5 +131,20 @@ describe('splitTitle', () => {
       author: null,
     });
     expect(splitTitle('Sem autor, ')).toEqual({ title: 'Sem autor, ', author: null });
+  });
+});
+
+describe('byTitle', () => {
+  it('sorts the way a Brazilian reader expects', () => {
+    const titles = ['memórias', 'Ébano', 'Ensaio', 'A Hora', 'ebó', '"Berserk"'];
+    const sorted = byTitle(titles.map((title) => ({ book: makeBook({ title }) })));
+    expect(sorted.map((item) => item.book.title)).toEqual([
+      'A Hora',
+      '"Berserk"',
+      'Ébano',
+      'ebó',
+      'Ensaio',
+      'memórias',
+    ]);
   });
 });

@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 
 import { useBackend } from '@/app/services';
 import { useWatch, type Watched } from '@/app/use-watch';
-import type { Cycle, CycleId, MemberId, OwnAnswer } from '@/domain/types';
+import type { Cycle, CycleId, MemberId, Nomination, OwnAnswer } from '@/domain/types';
 import type { Subscriber } from '@/services/backend';
 
 /** Live club data shared by the pages. */
@@ -10,6 +10,15 @@ import type { Subscriber } from '@/services/backend';
 export function useCycles(): Watched<Cycle[]> {
   const { club } = useBackend();
   const watch = useCallback((s: Subscriber<Cycle[]>) => club.watchCycles(s), [club]);
+  return useWatch(watch);
+}
+
+export function useNominations(cycleId: CycleId): Watched<Nomination[]> {
+  const { club } = useBackend();
+  const watch = useCallback(
+    (s: Subscriber<Nomination[]>) => club.watchNominations(cycleId, s),
+    [club, cycleId],
+  );
   return useWatch(watch);
 }
 

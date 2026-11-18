@@ -1,5 +1,7 @@
 .dialog {
   inline-size: min(28rem, calc(100% - 2 * var(--gutter)));
+  /* The global reset removes the margin that centers a modal dialog. */
+  margin: auto;
   padding: 0;
   border: 0;
   border-radius: var(--radius);

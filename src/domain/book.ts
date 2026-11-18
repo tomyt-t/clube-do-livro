@@ -137,3 +137,10 @@ export function splitTitle(text: string): TitleParts {
   const author = text.slice(index + length).trim();
   return title && author ? { title, author } : { title: text, author: null };
 }
+
+const TITLE_ORDER = new Intl.Collator('pt-BR', { sensitivity: 'base', ignorePunctuation: true });
+
+/** Alphabetical as a Brazilian reader expects: accents and case do not split groups. */
+export function byTitle<T extends { book: Book }>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => TITLE_ORDER.compare(a.book.title, b.book.title));
+}
