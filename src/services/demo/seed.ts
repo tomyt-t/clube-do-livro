@@ -51,7 +51,8 @@ function resultsOf(past: PastCycle): VoteResults {
  */
 function closingTimeFor(past: PastCycle, around: Date): Date {
   if (past.method !== 'draw') return around;
-  const order = drawOrder(finalists(Object.keys(past.results), resultsOf(past)));
+  const options = Object.keys(past.results);
+  const order = drawOrder(finalists(options, resultsOf(past)), options);
   const ms = around.getTime();
   return new Date(ms - (ms % order.length) + order.indexOf(past.winner));
 }
@@ -79,7 +80,7 @@ function pastCycle(now: Date, past: PastCycle): Cycle {
       book: DEMO_BOOKS[past.winner],
       method: past.method,
       decidedAt,
-      drawnFrom: past.method === 'draw' ? drawOrder(finalists(options, results)) : [],
+      drawnFrom: past.method === 'draw' ? drawOrder(finalists(options, results), options) : [],
     },
     readingStartedAt: decidedAt,
     finishedReaders: past.finishedDaysAgo === null ? 0 : 6,
@@ -109,7 +110,7 @@ const PAST_CYCLES: PastCycle[] = [
     number: 3,
     winner: 'cem',
     method: 'draw',
-    results: { cem: [4, 2], avesso: [4, 2], quarto: [4, 2] },
+    results: { avesso: [4, 2], cem: [4, 2], quarto: [4, 2] },
     startedDaysAgo: 40,
     finishedDaysAgo: null,
   },

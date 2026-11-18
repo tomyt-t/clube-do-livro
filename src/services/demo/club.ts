@@ -2,9 +2,15 @@ import { isPastDeadline } from '@/domain/cycle';
 import { normalizeBook, validateBook } from '@/domain/book';
 import { addBallot } from '@/domain/tally';
 import type { Cycle, CycleId, NominationAnswer, NominationId, VoteResults } from '@/domain/types';
-import { ownNominationOf, validateBallot } from '@/domain/voting';
+import { hasRoomForNomination, ownNominationOf, validateBallot } from '@/domain/voting';
 
-import { BackendError, type BallotInput, type ClubPort, type Subscriber } from '../backend';
+import {
+  BackendError,
+  type AnswerInput,
+  type BallotInput,
+  type ClubPort,
+  type Subscriber,
+} from '../backend';
 
 import { deny, pause, requireMember, requireSelf, type DemoContext } from './context';
 import type { DemoState } from './state';
@@ -28,12 +34,14 @@ function nominationFrom(answer: NominationAnswer, id: NominationId) {
   return { id, book };
 }
 
-function assertCanAnswer(context: DemoContext, cycleId: CycleId, uid: string) {
+function assertCanAnswer(context: DemoContext, { cycleId, uid, answer }: AnswerInput) {
   const cycle = cycleOf(context, cycleId);
   const answered = context.store.current.answers[cycleId]?.[uid] !== undefined;
+  const full = answer.kind === 'nominate' && !hasRoomForNomination(cycle.nominationIds);
   if (cycle.status !== 'nominating' || isPastDeadline(cycle.nominationDeadline) || answered) {
     deny();
   }
+  if (full) deny();
 }
 
 function isAcceptingVotes(cycle: Cycle): boolean {
@@ -78,10 +86,11 @@ export function createDemoClub(context: DemoContext): ClubPort {
       });
     },
 
-    answerNominationCall: async ({ cycleId, uid, answer }) => {
+    answerNominationCall: async (input) => {
+      const { cycleId, uid, answer } = input;
       await pause(context);
       requireSelf(context, uid);
-      assertCanAnswer(context, cycleId, uid);
+      assertCanAnswer(context, input);
       const nomination = nominationFrom(answer, crypto.randomUUID());
 
       store.update((state) => {

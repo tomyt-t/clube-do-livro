@@ -1,10 +1,17 @@
 import type { NominationId, OwnAnswer, RankedChoices } from './types';
 
 /**
- * Upper bound of options on a ballot. Firestore rules validate each option
- * slot explicitly (they have no loops), so this must match `firestore.rules`.
+ * Upper bound of options on a ballot, and so of nominations per round.
+ * Firestore rules check each option slot explicitly (they have no loops)
+ * within 1000 expressions per request; `tests/rules/limits.test.ts` proves
+ * the costliest cases fit. Must match `firestore.rules`.
  */
-export const MAX_OPTIONS = 30;
+export const MAX_OPTIONS = 20;
+
+/** Whether one more nomination still fits on the ballot. */
+export function hasRoomForNomination(nominationIds: readonly NominationId[]): boolean {
+  return nominationIds.length < MAX_OPTIONS;
+}
 
 /** Each member picks a first and a second choice, never their own nomination. */
 export const VOTES_PER_MEMBER = 2;

@@ -21,8 +21,12 @@ rules_version = '2';
 // * Everything not explicitly allowed is denied.
 //
 // Limits shared with src/domain: book fields (book.ts), two choices per
-// ballot and 30 options (voting.ts). Rules have no loops, so list checks are
-// unrolled.
+// ballot and 20 options (voting.ts). Rules have no loops, so list checks are
+// unrolled, each slot guarded by the list's size.
+//
+// Firestore evaluates at most 1000 expressions per request, shared by every
+// document of a batch. Hence the order below: cheap status checks first, and
+// list checks that only do real work for the options that exist.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -188,11 +192,10 @@ service cloud.firestore {
       allow read: if isMember();
       allow create: if (isAdmin() && isNewCycle(cycleId, request.resource.data))
         || (isMember() && isNextRound(cycleId, request.resource.data));
-      allow update: if (isMember() && countsOwnAnswer(cycleId))
-        || (isMember() && countsOwnBallot(cycleId))
-        || (isMember() && countsOwnFinish(cycleId))
-        || (isMember() && isFlowStep(cycleId, resource.data, request.resource.data))
-        || (isAdmin() && isValidTransition(cycleId, resource.data, request.resource.data));
+      allow update: if isMember()
+        && (countsOwnPart(cycleId, resource.data, request.resource.data)
+          || isFlowStep(cycleId, resource.data, request.resource.data)
+          || (isAdmin() && isValidTransition(cycleId, resource.data, request.resource.data)));
       // A cycle can be dropped only before any vote exists.
       allow delete: if isAdmin() && resource.data.status == 'nominating';
 
@@ -251,16 +254,26 @@ service cloud.firestore {
       return !exists(answerPath(c)) && existsAfter(answerPath(c));
     }
 
-    // A nomination also joins the cycle's list, in arrival order.
-    function countsOwnAnswer(c) {
+    // A member's own answer, ballot or "Acabei de ler!", counted on the cycle.
+    function countsOwnPart(c, before, after) {
+      return (before.status == 'nominating' && countsOwnAnswer(c, before, after))
+        || (before.status == 'voting' && countsOwnBallot(c, before, after))
+        || (before.status == 'reading' && countsOwnFinish(c, before, after));
+    }
+
+    function countsOwnAnswer(c, before, after) {
+      return changesOnly(['responses', 'nominationIds'])
+        && after.responses == before.responses + 1
+        && isAnsweringNow(c)
+        && listsOwnNomination(c, before.nominationIds, after.nominationIds);
+    }
+
+    // A nomination also joins the cycle's list, in arrival order, while the
+    // ballot has room for it.
+    function listsOwnNomination(c, before, after) {
       let nominated = getAfter(answerPath(c)).data.nominationId;
-      let before = resource.data.nominationIds;
-      return resource.data.status == 'nominating'
-        && changesOnly(['responses', 'nominationIds'])
-        && request.resource.data.responses == resource.data.responses + 1
-        && request.resource.data.nominationIds
-          == (nominated == null ? before : before.concat([nominated]))
-        && isAnsweringNow(c);
+      return (nominated == null && after == before)
+        || (nominated != null && before.size() < 20 && after == before.concat([nominated]));
     }
 
     function isNewAnswer(c) {
@@ -294,11 +307,10 @@ service cloud.firestore {
         && getAfter(cyclePath(c)).data.ballots == get(cyclePath(c)).data.ballots + 1;
     }
 
-    function countsOwnBallot(c) {
-      return resource.data.status == 'voting'
-        && isBeforeDeadline(resource.data.votingDeadline)
+    function countsOwnBallot(c, before, after) {
+      return isBeforeDeadline(before.votingDeadline)
         && changesOnly(['ballots'])
-        && request.resource.data.ballots == resource.data.ballots + 1
+        && after.ballots == before.ballots + 1
         && isVotingNow(c)
         && getAfter(tallyPath(c)).data != get(tallyPath(c)).data;
     }
@@ -314,44 +326,49 @@ service cloud.firestore {
       return eligible < 2 ? eligible : 2;
     }
 
-    // Each option either keeps its count or gains exactly one.
-    function isStepAt(options, before, after, i) {
-      return i >= options.size()
-        || after[options[i]] == before[options[i]]
-        || after[options[i]] == before[options[i]] + 1;
-    }
-
-    function isStepOnly(o, b, a) {
-      return isStepAt(o, b, a, 0) && isStepAt(o, b, a, 1) && isStepAt(o, b, a, 2)
-        && isStepAt(o, b, a, 3) && isStepAt(o, b, a, 4) && isStepAt(o, b, a, 5)
-        && isStepAt(o, b, a, 6) && isStepAt(o, b, a, 7) && isStepAt(o, b, a, 8)
-        && isStepAt(o, b, a, 9) && isStepAt(o, b, a, 10) && isStepAt(o, b, a, 11)
-        && isStepAt(o, b, a, 12) && isStepAt(o, b, a, 13) && isStepAt(o, b, a, 14)
-        && isStepAt(o, b, a, 15) && isStepAt(o, b, a, 16) && isStepAt(o, b, a, 17)
-        && isStepAt(o, b, a, 18) && isStepAt(o, b, a, 19) && isStepAt(o, b, a, 20)
-        && isStepAt(o, b, a, 21) && isStepAt(o, b, a, 22) && isStepAt(o, b, a, 23)
-        && isStepAt(o, b, a, 24) && isStepAt(o, b, a, 25) && isStepAt(o, b, a, 26)
-        && isStepAt(o, b, a, 27) && isStepAt(o, b, a, 28) && isStepAt(o, b, a, 29);
-    }
-
-    function isValidVote(c) {
-      let cycle = get(cyclePath(c)).data;
+    // Option i, if chosen, gains one vote, and its first-choice count either
+    // stays or gains one. Options not chosen are left as they were (the
+    // diff checks below).
+    function addsOneAt(o, chosen, i) {
+      let x = o[i];
       let before = resource.data;
       let after = request.resource.data;
-      let votes = after.votes.diff(before.votes);
-      let firsts = after.firsts.diff(before.firsts);
+      return !(x in chosen)
+        || (after.votes[x] == before.votes[x] + 1
+          && (after.firsts[x] == before.firsts[x] || after.firsts[x] == before.firsts[x] + 1));
+    }
+
+    function addsOneEach(o, s) {
+      let n = o.size();
+      return (n < 1 || addsOneAt(o, s, 0)) && (n < 2 || addsOneAt(o, s, 1))
+        && (n < 3 || addsOneAt(o, s, 2)) && (n < 4 || addsOneAt(o, s, 3))
+        && (n < 5 || addsOneAt(o, s, 4)) && (n < 6 || addsOneAt(o, s, 5))
+        && (n < 7 || addsOneAt(o, s, 6)) && (n < 8 || addsOneAt(o, s, 7))
+        && (n < 9 || addsOneAt(o, s, 8)) && (n < 10 || addsOneAt(o, s, 9))
+        && (n < 11 || addsOneAt(o, s, 10)) && (n < 12 || addsOneAt(o, s, 11))
+        && (n < 13 || addsOneAt(o, s, 12)) && (n < 14 || addsOneAt(o, s, 13))
+        && (n < 15 || addsOneAt(o, s, 14)) && (n < 16 || addsOneAt(o, s, 15))
+        && (n < 17 || addsOneAt(o, s, 16)) && (n < 18 || addsOneAt(o, s, 17))
+        && (n < 19 || addsOneAt(o, s, 18)) && (n < 20 || addsOneAt(o, s, 19));
+    }
+
+    // The tally keeps exactly the ballot's options (it is created with them
+    // and never gains or loses a key), so the changed keys are options.
+    function isValidVote(c) {
+      let cycle = get(cyclePath(c)).data;
+      let votes = request.resource.data.votes.diff(resource.data.votes);
+      let firsts = request.resource.data.firsts.diff(resource.data.firsts);
       let own = ownNomination(c);
       return cycle.status == 'voting'
-        && hasExactly(after, ['votes', 'firsts'])
+        && hasExactly(request.resource.data, ['votes', 'firsts'])
         && votes.addedKeys().size() == 0 && votes.removedKeys().size() == 0
         && firsts.addedKeys().size() == 0 && firsts.removedKeys().size() == 0
         && votes.changedKeys().size() == requiredChoices(cycle.options, own)
-        && !votes.changedKeys().hasAny([own])
-        && isStepOnly(cycle.options, before.votes, after.votes)
+        && !(own in votes.changedKeys())
         // Exactly one first choice, and it is one of the books voted for.
         && firsts.changedKeys().size() == 1
         && firsts.changedKeys().difference(votes.changedKeys()).size() == 0
-        && isStepOnly(cycle.options, before.firsts, after.firsts)
+        && addsOneEach(cycle.options, votes.changedKeys())
         && isVotingNow(c);
     }
 
@@ -369,24 +386,24 @@ service cloud.firestore {
           == get(cyclePath(c)).data.finishedReaders + 1;
     }
 
-    function countsOwnFinish(c) {
-      return resource.data.status == 'reading'
-        && changesOnly(['finishedReaders'])
-        && request.resource.data.finishedReaders == resource.data.finishedReaders + 1
+    function countsOwnFinish(c, before, after) {
+      return changesOnly(['finishedReaders'])
+        && after.finishedReaders == before.finishedReaders + 1
         && isFinishingNow(c);
     }
 
     // ------------------------------------------------------------- flow steps
-    // Any member, once everyone has done their part.
+    // Any member, once everyone has done their part. Declaring the winner is
+    // fully checked, so anyone may do it as soon as the vote is closed.
 
     function isFlowStep(c, before, after) {
-      return (startsVoting(c, before, after)
-          && everyone(before.responses)
-          && after.options == before.nominationIds)
-        || (closesVoting(before, after)
-          && (everyone(before.ballots) || before.options.size() == 1))
-        || declaresWinner(c, before, after)
-        || finishesForEveryone(before, after);
+      return (before.status == 'nominating' && after.options == before.nominationIds
+          && everyone(before.responses) && startsVoting(c, before, after))
+        || (before.status == 'voting'
+          && (before.options.size() == 1 || everyone(before.ballots))
+          && closesVoting(before, after))
+        || (before.status == 'tallying' && declaresWinner(c, before, after))
+        || (before.status == 'reading' && finishesForEveryone(before, after));
     }
 
     // Ending the book always opens the next round, in the same batch.
@@ -434,7 +451,7 @@ service cloud.firestore {
     }
 
     function hasDistinctOptions(options) {
-      return options is list && options.size() >= 1 && options.size() <= 30
+      return options is list && options.size() >= 1 && options.size() <= 20
         && options.toSet().size() == options.size();
     }
 
@@ -473,95 +490,66 @@ service cloud.firestore {
         && after.votingClosedAt == request.time;
     }
 
-    // Does `w` beat option i? mode 0: more votes. mode 1: more votes, or as
-    // many with more first choices. mode 2: as in 1, or tied on both.
-    function beatsSlot(o, r, w, mode, i) {
-      return i >= o.size() || o[i] == w
-        || r.votes[o[i]] < r.votes[w]
-        || (mode > 0 && r.votes[o[i]] == r.votes[w]
-          && (r.firsts[o[i]] < r.firsts[w] || (mode == 2 && r.firsts[o[i]] == r.firsts[w])));
+    // How many options have exactly `value` in a tally map (no loop needed).
+    function countOf(counts, value) {
+      return counts.size() - counts.values().removeAll([value]).size();
     }
 
-    function leads(o, r, w, m) {
-      return beatsSlot(o, r, w, m, 0) && beatsSlot(o, r, w, m, 1) && beatsSlot(o, r, w, m, 2)
-        && beatsSlot(o, r, w, m, 3) && beatsSlot(o, r, w, m, 4) && beatsSlot(o, r, w, m, 5)
-        && beatsSlot(o, r, w, m, 6) && beatsSlot(o, r, w, m, 7) && beatsSlot(o, r, w, m, 8)
-        && beatsSlot(o, r, w, m, 9) && beatsSlot(o, r, w, m, 10) && beatsSlot(o, r, w, m, 11)
-        && beatsSlot(o, r, w, m, 12) && beatsSlot(o, r, w, m, 13) && beatsSlot(o, r, w, m, 14)
-        && beatsSlot(o, r, w, m, 15) && beatsSlot(o, r, w, m, 16) && beatsSlot(o, r, w, m, 17)
-        && beatsSlot(o, r, w, m, 18) && beatsSlot(o, r, w, m, 19) && beatsSlot(o, r, w, m, 20)
-        && beatsSlot(o, r, w, m, 21) && beatsSlot(o, r, w, m, 22) && beatsSlot(o, r, w, m, 23)
-        && beatsSlot(o, r, w, m, 24) && beatsSlot(o, r, w, m, 25) && beatsSlot(o, r, w, m, 26)
-        && beatsSlot(o, r, w, m, 27) && beatsSlot(o, r, w, m, 28) && beatsSlot(o, r, w, m, 29);
+    // Every option is behind the winner w, except the ones listed in d, which
+    // tie with it. Votes count first, then first choices: as one number,
+    // votes × M + first choices (one first choice per member keeps them
+    // apart). Each slot is the same check for one option, written out in
+    // full, since function arguments count as expressions too.
+    function isTop(o, r, w, d) {
+      let n = o.size();
+      let v = r.votes;
+      let f = r.firsts;
+      let M = 1000000;
+      let top = v[w] * M + f[w];
+      return (n < 1 || (o[0] in d ? v[o[0]] * M + f[o[0]] == top : v[o[0]] * M + f[o[0]] < top))
+        && (n < 2 || (o[1] in d ? v[o[1]] * M + f[o[1]] == top : v[o[1]] * M + f[o[1]] < top))
+        && (n < 3 || (o[2] in d ? v[o[2]] * M + f[o[2]] == top : v[o[2]] * M + f[o[2]] < top))
+        && (n < 4 || (o[3] in d ? v[o[3]] * M + f[o[3]] == top : v[o[3]] * M + f[o[3]] < top))
+        && (n < 5 || (o[4] in d ? v[o[4]] * M + f[o[4]] == top : v[o[4]] * M + f[o[4]] < top))
+        && (n < 6 || (o[5] in d ? v[o[5]] * M + f[o[5]] == top : v[o[5]] * M + f[o[5]] < top))
+        && (n < 7 || (o[6] in d ? v[o[6]] * M + f[o[6]] == top : v[o[6]] * M + f[o[6]] < top))
+        && (n < 8 || (o[7] in d ? v[o[7]] * M + f[o[7]] == top : v[o[7]] * M + f[o[7]] < top))
+        && (n < 9 || (o[8] in d ? v[o[8]] * M + f[o[8]] == top : v[o[8]] * M + f[o[8]] < top))
+        && (n < 10 || (o[9] in d ? v[o[9]] * M + f[o[9]] == top : v[o[9]] * M + f[o[9]] < top))
+        && (n < 11 || (o[10] in d ? v[o[10]] * M + f[o[10]] == top : v[o[10]] * M + f[o[10]] < top))
+        && (n < 12 || (o[11] in d ? v[o[11]] * M + f[o[11]] == top : v[o[11]] * M + f[o[11]] < top))
+        && (n < 13 || (o[12] in d ? v[o[12]] * M + f[o[12]] == top : v[o[12]] * M + f[o[12]] < top))
+        && (n < 14 || (o[13] in d ? v[o[13]] * M + f[o[13]] == top : v[o[13]] * M + f[o[13]] < top))
+        && (n < 15 || (o[14] in d ? v[o[14]] * M + f[o[14]] == top : v[o[14]] * M + f[o[14]] < top))
+        && (n < 16 || (o[15] in d ? v[o[15]] * M + f[o[15]] == top : v[o[15]] * M + f[o[15]] < top))
+        && (n < 17 || (o[16] in d ? v[o[16]] * M + f[o[16]] == top : v[o[16]] * M + f[o[16]] < top))
+        && (n < 18 || (o[17] in d ? v[o[17]] * M + f[o[17]] == top : v[o[17]] * M + f[o[17]] < top))
+        && (n < 19 || (o[18] in d ? v[o[18]] * M + f[o[18]] == top : v[o[18]] * M + f[o[18]] < top))
+        && (n < 20 || (o[19] in d ? v[o[19]] * M + f[o[19]] == top : v[o[19]] * M + f[o[19]] < top));
     }
 
-    // Draw list, element i: an option tied with the winner on votes and
-    // first choices, and after the one before it (strictly ascending ids).
-    function isTieAt(o, r, d, w, i) {
-      return i >= d.size()
-        || (d[i] in o && r.votes[d[i]] == r.votes[w] && r.firsts[d[i]] == r.firsts[w]
-          && (i == 0 || d[i - 1] < d[i]));
-    }
-
-    // Option i, if tied with the winner, must be in the draw list.
-    function isListedAt(o, r, d, w, i) {
-      return i >= o.size()
-        || !(r.votes[o[i]] == r.votes[w] && r.firsts[o[i]] == r.firsts[w])
-        || o[i] in d;
-    }
-
-    function isTieList(o, r, d, w) {
-      return isTieAt(o, r, d, w, 0) && isTieAt(o, r, d, w, 1) && isTieAt(o, r, d, w, 2)
-        && isTieAt(o, r, d, w, 3) && isTieAt(o, r, d, w, 4) && isTieAt(o, r, d, w, 5)
-        && isTieAt(o, r, d, w, 6) && isTieAt(o, r, d, w, 7) && isTieAt(o, r, d, w, 8)
-        && isTieAt(o, r, d, w, 9) && isTieAt(o, r, d, w, 10) && isTieAt(o, r, d, w, 11)
-        && isTieAt(o, r, d, w, 12) && isTieAt(o, r, d, w, 13) && isTieAt(o, r, d, w, 14)
-        && isTieAt(o, r, d, w, 15) && isTieAt(o, r, d, w, 16) && isTieAt(o, r, d, w, 17)
-        && isTieAt(o, r, d, w, 18) && isTieAt(o, r, d, w, 19) && isTieAt(o, r, d, w, 20)
-        && isTieAt(o, r, d, w, 21) && isTieAt(o, r, d, w, 22) && isTieAt(o, r, d, w, 23)
-        && isTieAt(o, r, d, w, 24) && isTieAt(o, r, d, w, 25) && isTieAt(o, r, d, w, 26)
-        && isTieAt(o, r, d, w, 27) && isTieAt(o, r, d, w, 28) && isTieAt(o, r, d, w, 29);
-    }
-
-    function listsEveryTie(o, r, d, w) {
-      return isListedAt(o, r, d, w, 0) && isListedAt(o, r, d, w, 1) && isListedAt(o, r, d, w, 2)
-        && isListedAt(o, r, d, w, 3) && isListedAt(o, r, d, w, 4) && isListedAt(o, r, d, w, 5)
-        && isListedAt(o, r, d, w, 6) && isListedAt(o, r, d, w, 7) && isListedAt(o, r, d, w, 8)
-        && isListedAt(o, r, d, w, 9) && isListedAt(o, r, d, w, 10) && isListedAt(o, r, d, w, 11)
-        && isListedAt(o, r, d, w, 12) && isListedAt(o, r, d, w, 13)
-        && isListedAt(o, r, d, w, 14) && isListedAt(o, r, d, w, 15)
-        && isListedAt(o, r, d, w, 16) && isListedAt(o, r, d, w, 17)
-        && isListedAt(o, r, d, w, 18) && isListedAt(o, r, d, w, 19)
-        && isListedAt(o, r, d, w, 20) && isListedAt(o, r, d, w, 21)
-        && isListedAt(o, r, d, w, 22) && isListedAt(o, r, d, w, 23)
-        && isListedAt(o, r, d, w, 24) && isListedAt(o, r, d, w, 25)
-        && isListedAt(o, r, d, w, 26) && isListedAt(o, r, d, w, 27)
-        && isListedAt(o, r, d, w, 28) && isListedAt(o, r, d, w, 29);
-    }
-
-    // The tied books, in a fixed order; the winner is the one at the
+    // The draw list holds exactly the books tied with the winner, in the
+    // ballot's order (fixed when voting opened); the winner is the one at the
     // closing time's milliseconds modulo their count. Nobody picks it.
-    function isFairDraw(o, r, winner, closedAt) {
-      let d = winner.drawnFrom;
-      let w = winner.nominationId;
-      return d is list && d.size() >= 2 && d.size() <= 30
-        && isTieList(o, r, d, w) && listsEveryTie(o, r, d, w)
-        && d[closedAt.toMillis() % d.size()] == w;
+    function isFairDraw(o, r, w, d, closedAt) {
+      return d is list && d.size() >= 2
+        // Ballot options, each once, in the ballot's order: no loop needed.
+        && o.removeAll(o.removeAll(d)) == d
+        && d[closedAt.toMillis() % d.size()] == w
+        && isTop(o, r, w, d);
     }
 
     // The method must be the step that actually decided: a clear leader on
     // votes cannot be labeled a first-choice or a draw win, and so on.
-    function isEarnedWin(options, results, winner, closedAt) {
+    function isEarnedWin(o, r, winner, closedAt) {
       let w = winner.nominationId;
       let m = winner.method;
-      return (m != 'draw' && winner.drawnFrom == []
-          && ((m == 'unopposed' && options.size() == 1)
-            || (m == 'votes' && options.size() > 1 && leads(options, results, w, 0))
-            || (m == 'first-choices' && leads(options, results, w, 1)
-              && !leads(options, results, w, 0))))
-        || (m == 'draw' && leads(options, results, w, 2)
-          && !leads(options, results, w, 1)
-          && isFairDraw(options, results, winner, closedAt));
+      let d = winner.drawnFrom;
+      let tiedOnVotes = countOf(r.votes, r.votes[w]);
+      return (m == 'unopposed' && d == [] && o.size() == 1)
+        || (m == 'votes' && d == [] && o.size() > 1 && tiedOnVotes == 1 && isTop(o, r, w, [w]))
+        || (m == 'first-choices' && d == [] && tiedOnVotes > 1 && isTop(o, r, w, [w]))
+        || (m == 'draw' && isFairDraw(o, r, w, d, closedAt));
     }
 
     // Results must be the tally itself; the winner must follow the rule.
@@ -592,11 +580,12 @@ service cloud.firestore {
         && after.finishedAt == request.time;
     }
 
+    // The organizer may also edit deadlines, open or close the vote early and
+    // move the chosen reading along. Declaring the winner is a flow step.
     function isValidTransition(c, before, after) {
       return editsDeadline(before, after)
         || startsVoting(c, before, after)
         || closesVoting(before, after)
-        || declaresWinner(c, before, after)
         || startsReading(before, after)
         || finishesReading(before, after);
     }

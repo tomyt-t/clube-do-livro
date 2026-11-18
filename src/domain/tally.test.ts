@@ -62,14 +62,14 @@ describe('decide', () => {
     expect(decision).toEqual({ nominationId: 'b', method: 'first-choices', drawnFrom: [] });
   });
 
-  it('draws among the books still tied, by the closing time', () => {
+  it("draws among the books still tied, in the ballot's order, by the closing time", () => {
     const tied = results({ a: 5, b: 5, c: 5 }, { a: 2, b: 2, c: 1 });
     expect(decide(['c', 'b', 'a'], tied, 1_000)).toEqual({
-      nominationId: 'a',
+      nominationId: 'b',
       method: 'draw',
-      drawnFrom: ['a', 'b'],
+      drawnFrom: ['b', 'a'],
     });
-    expect(decide(['c', 'b', 'a'], tied, 1_001).nominationId).toBe('b');
+    expect(decide(['c', 'b', 'a'], tied, 1_001).nominationId).toBe('a');
   });
 
   it('treats a single nomination as unopposed', () => {

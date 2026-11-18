@@ -148,8 +148,10 @@ describe('opening the vote', () => {
     expect(cycle.get('options')).toEqual(ALL_NOMINATIONS);
   });
 
-  it('is reserved to the admin', async () => {
+  it('is up to the admin alone until everyone answered', async () => {
+    await seedAnswered(env, { responses: 3 });
     await assertFails(openVoting(ALL_NOMINATIONS, ana));
+    await assertSucceeds(openVoting());
   });
 
   it('rejects more options than answers received, or repeated options', async () => {
@@ -284,8 +286,9 @@ describe('declaring a clear winner', () => {
     await assertSucceeds(finishReading(db, CYCLE));
   });
 
-  it('is reserved to the admin', async () => {
-    await assertFails(declare({ nominationId: N_ANA, method: 'votes', results, persona: bia }));
+  it('takes the same checks from any member', async () => {
+    await assertFails(declare({ nominationId: N_BIA, method: 'votes', results, persona: bia }));
+    await assertSucceeds(declare({ nominationId: N_ANA, method: 'votes', results, persona: bia }));
   });
 });
 
@@ -300,7 +303,7 @@ describe('ties', () => {
 
   it('still tied, go to a draw fixed by the closing time', async () => {
     const results = await closedWith({ [N_ANA]: [3, 2], [N_BIA]: [3, 2], [N_ADMIN]: [2, 0] });
-    // The tied books in id order; closed at an odd millisecond, so index 1 of 2 wins.
+    // The tied books in the ballot's order; closed at an odd millisecond, so index 1 of 2 wins.
     const drawnFrom = [N_ANA, N_BIA];
     const draw = (nominationId: NominationId, list: NominationId[]) =>
       declare({ nominationId, method: 'draw', results, drawnFrom: list });

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   eligibleOptions,
+  hasRoomForNomination,
+  MAX_OPTIONS,
   ownNominationOf,
   requiredChoices,
   validateBallot,
@@ -9,6 +11,14 @@ import {
 } from './voting';
 
 const options = ['a', 'b', 'c'];
+
+describe('hasRoomForNomination', () => {
+  it('takes nominations until the ballot is full', () => {
+    const ids = (count: number) => Array.from({ length: count }, (_, i) => `n${String(i)}`);
+    expect(hasRoomForNomination(ids(MAX_OPTIONS - 1))).toBe(true);
+    expect(hasRoomForNomination(ids(MAX_OPTIONS))).toBe(false);
+  });
+});
 
 describe('ownNominationOf', () => {
   it('returns the nominated book only when the member nominated one', () => {

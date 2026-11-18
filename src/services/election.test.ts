@@ -113,7 +113,7 @@ describe('the automatic flow', () => {
     await settle(backend);
 
     const cycle = await cycleOf(backend, cycleId);
-    const drawnFrom = [rafa, julia, teo].sort();
+    const drawnFrom = cycle.options.filter((id) => [rafa, julia, teo].includes(id));
     expect(cycle.winner?.method).toBe('draw');
     expect(cycle.winner?.drawnFrom).toEqual(drawnFrom);
     const seed = cycle.votingClosedAt?.getTime() ?? 0;

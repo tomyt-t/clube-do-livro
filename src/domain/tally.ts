@@ -88,8 +88,8 @@ export function decide(
     return { nominationId: firstChoice, method: 'first-choices', drawnFrom: [] };
   }
   return {
-    nominationId: drawWinner(byFirsts, drawSeed),
+    nominationId: drawWinner(byFirsts, options, drawSeed),
     method: 'draw',
-    drawnFrom: drawOrder(byFirsts),
+    drawnFrom: drawOrder(byFirsts, options),
   };
 }
