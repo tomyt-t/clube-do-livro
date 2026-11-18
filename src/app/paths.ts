@@ -3,4 +3,6 @@ export const PATHS = {
   reading: '/',
   election: '/votacao',
   history: '/historico',
+  /** Only for the organizer; reached from the account menu. */
+  admin: '/organizar',
 } as const;

@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 
+import { AdminPage } from '@/features/admin/AdminPage';
 import { ElectionPage } from '@/features/election/ElectionPage';
 import { HistoryPage } from '@/features/history/HistoryPage';
 import { ReadingPage } from '@/features/reading/ReadingPage';
@@ -30,6 +31,7 @@ export function AppRoutes() {
           <Route path={PATHS.reading} element={<ReadingPage />} />
           <Route path={PATHS.election} element={<ElectionPage />} />
           <Route path={PATHS.history} element={<HistoryPage />} />
+          <Route path={PATHS.admin} element={<AdminPage />} />
           <Route path="*" element={<Navigate to={PATHS.reading} replace />} />
         </Routes>
       </motion.div>

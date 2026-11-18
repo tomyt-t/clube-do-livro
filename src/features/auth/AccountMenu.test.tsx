@@ -15,7 +15,10 @@ describe('AccountMenu', () => {
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('marina@example.com')).toBeInTheDocument();
-    expect(screen.getByText('Organiza o clube')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Organizar o clube' })).toHaveAttribute(
+      'href',
+      '/organizar',
+    );
 
     await user.click(screen.getByRole('button', { name: 'Sair' }));
     expect(await screen.findByRole('button', { name: 'Entrar com Google' })).toBeInTheDocument();
@@ -25,7 +28,7 @@ describe('AccountMenu', () => {
     const { user } = renderAsMember(<AccountMenu />, 'rafa');
     const trigger = await screen.findByRole('button', { name: 'Conta de Rafa' });
     await user.click(trigger);
-    expect(screen.queryByText('Organiza o clube')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Organizar o clube' })).not.toBeInTheDocument();
     await user.keyboard('{Escape}');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });

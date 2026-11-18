@@ -11,6 +11,11 @@ import { contentSecurityPolicy } from './vite-plugins/csp';
 export default defineConfig({
   base: './',
   plugins: [react(), contentSecurityPolicy()],
+  build: {
+    // The Firebase SDK (auth + Firestore) is its own chunk, ~580 kB before
+    // compression (~175 kB gzipped). Anything larger is worth a look.
+    chunkSizeWarningLimit: 600,
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

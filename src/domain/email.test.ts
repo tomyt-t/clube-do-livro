@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isEmail, normalizeEmail } from './email';
+import { isEmail, normalizeEmail, parseEmails } from './email';
 
 describe('normalizeEmail', () => {
   it('trims and lowercases', () => {
@@ -19,4 +19,21 @@ describe('isEmail', () => {
       expect(isEmail(value)).toBe(false);
     },
   );
+});
+
+describe('parseEmails', () => {
+  it('reads a pasted list in any shape, without repeats', () => {
+    const pasted = 'Rafa <Rafa@Example.com>, julia@example.com; teo@example.com\nrafa@example.com';
+    expect(parseEmails(pasted)).toEqual({
+      valid: ['rafa@example.com', 'julia@example.com', 'teo@example.com'],
+      invalid: [],
+    });
+  });
+
+  it('ignores names and points out what only looks like an email', () => {
+    expect(parseEmails('Marina marina@ lia@example.com bruno@exemplo')).toEqual({
+      valid: ['lia@example.com'],
+      invalid: ['marina@', 'bruno@exemplo'],
+    });
+  });
 });

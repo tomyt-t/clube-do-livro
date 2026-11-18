@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useId, useRef, useState } from 'react';
 
-import { Button } from '@/ui/Button';
+import { PATHS } from '@/app/paths';
+import { Button, LinkButton } from '@/ui/Button';
 import { useDismiss } from '@/ui/use-dismiss';
 
 import styles from './AccountMenu.module.css';
@@ -41,7 +42,11 @@ export function AccountMenu() {
           <motion.div id={panelId} className={styles.panel} {...PANEL_MOTION}>
             <p className={styles.name}>{user.name}</p>
             <p className={styles.detail}>{user.email}</p>
-            {isAdmin && <p className={styles.detail}>Organiza o clube</p>}
+            {isAdmin && (
+              <LinkButton to={PATHS.admin} variant="secondary" block onClick={close}>
+                Organizar o clube
+              </LinkButton>
+            )}
             <Button variant="secondary" block onClick={() => void actions.signOut()}>
               Sair
             </Button>
