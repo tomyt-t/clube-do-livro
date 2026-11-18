@@ -4,13 +4,13 @@ import { DEMO_BOOKS } from './books';
 import { roundKey, type DemoPersona, type DemoState } from './state';
 
 export const DEMO_PERSONAS: readonly DemoPersona[] = [
-  { uid: 'marina', name: 'Marina', email: 'marina@example.com' },
+  { uid: 'marina', name: 'Marina', email: 'marina@example.com', note: 'organiza' },
   { uid: 'rafa', name: 'Rafa', email: 'rafa@example.com' },
   { uid: 'julia', name: 'Júlia', email: 'julia@example.com' },
   { uid: 'teo', name: 'Téo', email: 'teo@example.com' },
   { uid: 'bruno', name: 'Bruno', email: 'bruno@example.com' },
   { uid: 'lia', name: 'Lia', email: 'lia@example.com' },
-  { uid: 'visitante', name: 'Visitante', email: 'visitante@example.com' },
+  { uid: 'visitante', name: 'Visitante', email: 'visitante@example.com', note: 'fora da lista' },
 ];
 
 /** Marina organizes the club; the visitor is not on the allowlist. */

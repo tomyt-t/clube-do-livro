@@ -9,15 +9,12 @@ interface AppShellProps {
   clubName: string;
   /** Right side of the header, e.g. the account menu. */
   account?: ReactNode;
-  /** Full-width strip above the header, e.g. the demo notice. */
-  banner?: ReactNode;
   children: ReactNode;
 }
 
-export function AppShell({ clubName, account, banner, children }: AppShellProps) {
+export function AppShell({ clubName, account, children }: AppShellProps) {
   return (
     <div className={styles.shell}>
-      {banner}
       <header className={styles.header}>
         <div className={styles.bar}>
           <div className={styles.rule}>

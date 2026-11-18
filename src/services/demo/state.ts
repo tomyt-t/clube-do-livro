@@ -28,6 +28,8 @@ export interface DemoPersona {
   uid: MemberId;
   name: string;
   email: string;
+  /** Shown next to the name in the demo switcher, e.g. "organiza". */
+  note?: string;
 }
 
 export function roundKey(cycleId: CycleId, round: number): string {
@@ -63,12 +65,21 @@ export class DemoStore {
     return () => this.listeners.delete(listener);
   }
 
-  /** Emits a copy of the selection now and after every change, asynchronously. */
+  /**
+   * Emits a copy of the selection now and whenever it changes, asynchronously.
+   * Like Firestore listeners, unrelated changes to the store emit nothing.
+   */
   watch<T>(select: (state: DemoState) => T, next: (value: T) => void): () => void {
     let active = true;
+    let last: string | undefined;
     const emit = () => {
       queueMicrotask(() => {
-        if (active) next(structuredClone(select(this.state)));
+        if (!active) return;
+        const value = select(this.state);
+        const signature = JSON.stringify(value) as string | undefined;
+        if (last !== undefined && signature === last) return;
+        last = signature ?? 'undefined';
+        next(structuredClone(value));
       });
     };
     emit();

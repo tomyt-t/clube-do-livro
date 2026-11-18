@@ -1,0 +1,38 @@
+.screen {
+  display: grid;
+  align-content: center;
+  gap: var(--space-3);
+  max-inline-size: calc(26rem + 2 * var(--gutter));
+  min-block-size: 100dvh;
+  margin-inline: auto;
+  padding: var(--space-6) var(--gutter);
+}
+
+.club {
+  padding-block-start: 0.875rem;
+  border-block-start: 2px solid var(--ink);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.title {
+  margin-block-start: var(--space-3);
+  font-size: var(--title-sm);
+  line-height: 1.05;
+}
+
+.text {
+  color: var(--ink-2);
+}
+
+.actions {
+  display: grid;
+  gap: 0.625rem;
+  margin-block-start: var(--space-4);
+}
+
+.actions form {
+  display: grid;
+  gap: 0.625rem;
+}

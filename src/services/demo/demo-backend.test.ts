@@ -31,6 +31,18 @@ describe('demo access', () => {
     expect(seen).toEqual([null, 'marina', null]);
   });
 
+  it('announces the session only when it changes, like Firebase', async () => {
+    const backend = createDemoBackend();
+    backend.auth.signInAs('rafa');
+    const seen: (string | null)[] = [];
+    const unsubscribe = backend.auth.watchUser((user) => seen.push(user?.uid ?? null));
+    await Promise.resolve();
+    await backend.club.saveProfile({ uid: 'rafa', name: 'Rafa', photoURL: null });
+    await Promise.resolve();
+    unsubscribe();
+    expect(seen).toEqual(['rafa']);
+  });
+
   it('reserves organizer actions to the admin', async () => {
     const backend = createDemoBackend();
     backend.auth.signInAs('rafa');

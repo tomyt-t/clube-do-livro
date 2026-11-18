@@ -1,0 +1,56 @@
+.menu {
+  position: relative;
+}
+
+.trigger {
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  background: transparent;
+  font-family: var(--serif);
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.trigger[aria-expanded='true'] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.panel {
+  position: absolute;
+  inset-block-start: calc(100% + 0.5rem);
+  inset-inline-end: 0;
+  z-index: 30;
+  display: grid;
+  gap: 0.125rem;
+  inline-size: 15rem;
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--line-2),
+    0 24px 40px -24px rgb(0 0 0 / 0.4);
+}
+
+.name {
+  font-family: var(--serif);
+  font-size: var(--text-lg);
+  font-weight: 650;
+}
+
+.detail {
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel button {
+  margin-block-start: var(--space-3);
+}
