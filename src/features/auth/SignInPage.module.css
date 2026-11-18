@@ -1,6 +1,7 @@
 /*
- * The prototype's sign-in, on every screen size: one column, the club at the
- * table under the title, and the ways in at the bottom.
+ * The prototype's sign-in: one column, the club at the table under the
+ * title, and the ways in at the bottom. On wide screens the masthead runs
+ * across the page and the club gets the left side to itself.
  */
 .page {
   display: flex;
@@ -80,4 +81,50 @@
   color: var(--ink-2);
   font-size: var(--text-xs);
   text-align: center;
+}
+
+@media (min-width: 60rem) {
+  .page {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(20rem, 1fr);
+    grid-template-rows: auto 1fr auto auto auto 1fr;
+    grid-template-areas:
+      'mast mast'
+      'scene .'
+      'scene title'
+      'scene lede'
+      'scene access'
+      'scene .';
+    column-gap: clamp(3rem, 7vw, 6.5rem);
+    max-inline-size: 76rem;
+    padding: 0 var(--gutter) var(--space-5);
+  }
+
+  .mast {
+    grid-area: mast;
+  }
+
+  .title {
+    grid-area: title;
+    margin-block-start: 0;
+    font-size: 4.25rem;
+  }
+
+  .lede {
+    grid-area: lede;
+    margin-block-start: var(--space-4);
+  }
+
+  .scene {
+    grid-area: scene;
+    align-self: center;
+    inline-size: 100%;
+    margin: var(--space-6) 0 0;
+  }
+
+  .access {
+    grid-area: access;
+    margin-block: var(--space-6) 0;
+    padding-block-start: 0;
+  }
 }

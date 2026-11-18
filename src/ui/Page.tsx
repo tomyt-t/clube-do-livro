@@ -9,7 +9,8 @@ interface PageProps {
   /** Every page has one `<h1>`; hide it when the design shows the title another way. */
   title: string;
   hideTitle?: boolean;
-  width?: 'content' | 'wide';
+  /** `content` is a reading column, `roomy` a little wider, `wide` the whole layout. */
+  width?: 'content' | 'roomy' | 'wide';
   /** The boteco scene behind the title. Decorative: hidden from assistive tech. */
   art?: boolean;
   children: ReactNode;
@@ -23,7 +24,7 @@ export function Page({
   children,
 }: PageProps) {
   return (
-    <div className={cx(styles.page, width === 'wide' && styles.wide)}>
+    <div className={cx(styles.page, width !== 'content' && styles[width])}>
       {art && (
         <img
           className={styles.art}

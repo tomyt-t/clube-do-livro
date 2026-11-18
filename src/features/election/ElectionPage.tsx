@@ -66,7 +66,7 @@ export function ElectionPage() {
   const voting = isVoting(cycles);
   const sidebar = voting && wide;
   return (
-    <Page title="Votação" hideTitle={sidebar} art={!sidebar} width={voting ? 'wide' : 'content'}>
+    <Page title="Votação" hideTitle={sidebar} art={!sidebar} width={voting ? 'wide' : 'roomy'}>
       {cycles.status === 'loading' && <Loading />}
       {cycles.status === 'error' && (
         <Notice tone="error" title="Não foi possível abrir a votação">

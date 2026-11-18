@@ -15,6 +15,17 @@ html {
   text-size-adjust: 100%;
 }
 
+/*
+ * Desktop: the whole interface a touch larger. Every size is in rem, so this
+ * scales text, spacing and controls together (breakpoints stay put: media
+ * queries measure rem from the browser's default, not from this).
+ */
+@media (min-width: 60rem) {
+  html {
+    font-size: 112.5%;
+  }
+}
+
 body {
   min-height: 100dvh;
   background: var(--paper);

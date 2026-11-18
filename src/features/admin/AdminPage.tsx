@@ -12,7 +12,7 @@ export function AdminPage() {
   const { isAdmin } = useMember();
   if (!isAdmin) return <Navigate to={PATHS.reading} replace />;
   return (
-    <Page title="Organizar">
+    <Page title="Organizar" width="roomy">
       <RoundPanel />
       <MembersPanel />
     </Page>

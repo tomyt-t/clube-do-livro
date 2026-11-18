@@ -9,6 +9,10 @@
   padding: 1.375rem var(--gutter) var(--space-7);
 }
 
+.roomy {
+  max-inline-size: calc(var(--roomy-width) + 2 * var(--gutter));
+}
+
 .wide {
   max-inline-size: calc(var(--wide-width) + 2 * var(--gutter));
 }

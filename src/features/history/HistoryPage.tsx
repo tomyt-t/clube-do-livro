@@ -69,7 +69,7 @@ function HistoryOverview({ cycles }: { cycles: readonly DecidedCycle[] }) {
 export function HistoryPage() {
   const cycles = useCycles();
   return (
-    <Page title="Histórico">
+    <Page title="Histórico" width="roomy">
       {cycles.status === 'loading' && <Loading />}
       {cycles.status === 'error' && (
         <Notice tone="error" title="Não foi possível abrir o histórico">
