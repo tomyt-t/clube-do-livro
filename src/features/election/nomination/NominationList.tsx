@@ -14,15 +14,20 @@ interface NominationListProps {
   /** Already in the order to show. */
   nominations: readonly Nomination[];
   own: NominationId | null;
+  title?: string;
 }
 
 /** Every nomination so far, never who sent it. New ones slide into place. */
-export function NominationList({ nominations, own }: NominationListProps) {
+export function NominationList({
+  nominations,
+  own,
+  title = 'Indicações até agora',
+}: NominationListProps) {
   const headingId = useId();
   return (
     <section className={styles.listSection} aria-labelledby={headingId}>
       <div className={styles.listHeading}>
-        <h3 id={headingId}>Indicações até agora</h3>
+        <h3 id={headingId}>{title}</h3>
         <span>{countOf(nominations.length, 'leitura', 'leituras')}</span>
       </div>
       {nominations.length === 0 ? (

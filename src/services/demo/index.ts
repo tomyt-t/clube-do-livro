@@ -4,12 +4,15 @@ import { createDemoAdmin } from './admin';
 import { createDemoAuth, type DemoAuthPort } from './auth';
 import { createDemoClub } from './club';
 import { DEMO_ADMIN, DEMO_PERSONAS, createDemoState } from './seed';
+import type { DemoScenario } from './scenarios';
 import { DemoStore, type DemoPersona, type DemoState } from './state';
 
 export interface DemoBackend extends Backend {
   kind: 'demo';
   auth: DemoAuthPort;
   personas: readonly DemoPersona[];
+  /** Puts the current cycle at another stage; whoever is signed in stays. */
+  loadScenario(scenario: DemoScenario): void;
 }
 
 interface DemoOptions {
@@ -34,8 +37,14 @@ export function createDemoBackend(options: DemoOptions = {}): DemoBackend {
     club: createDemoClub(context),
     admin: createDemoAdmin(context),
     personas: DEMO_PERSONAS,
+    loadScenario: (scenario) => {
+      context.store.update((draft) => {
+        Object.assign(draft, createDemoState(new Date(), scenario), { session: draft.session });
+      });
+    },
   };
 }
 
 export { createDemoState, createEmptyDemoState, DEMO_ADMIN, DEMO_PERSONAS } from './seed';
+export { DEMO_SCENARIOS, type DemoScenario } from './scenarios';
 export type { DemoPersona, DemoState } from './state';

@@ -39,13 +39,15 @@ export function Button({
 interface LinkButtonProps extends LinkProps {
   variant?: ButtonVariant;
   block?: boolean;
+  compact?: boolean;
 }
 
 export function LinkButton({
   variant = 'primary',
   block = false,
+  compact = false,
   className,
   ...props
 }: LinkButtonProps) {
-  return <Link {...props} className={buttonClass({ variant, block, className })} />;
+  return <Link {...props} className={buttonClass({ variant, block, compact, className })} />;
 }

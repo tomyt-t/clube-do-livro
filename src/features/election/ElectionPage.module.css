@@ -1,0 +1,6 @@
+/* The page title, drawn in the sidebar; the real <h1> stays for screen readers. */
+.sideTitle {
+  margin-block-end: 1.125rem;
+  font: 650 var(--title) / 1 var(--serif);
+  letter-spacing: -0.03em;
+}

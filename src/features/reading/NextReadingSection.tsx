@@ -32,7 +32,7 @@ function Line({ headline, details = [], action }: LineProps) {
 
 function ElectionLink({ done, label }: { done: boolean; label: string }) {
   return (
-    <LinkButton to={PATHS.election} variant={done ? 'secondary' : 'primary'}>
+    <LinkButton to={PATHS.election} variant={done ? 'secondary' : 'primary'} compact>
       {done ? 'Acompanhar' : label}
     </LinkButton>
   );

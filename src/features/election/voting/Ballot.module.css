@@ -1,0 +1,249 @@
+.ballot {
+  --ballotbar-height: 4.75rem;
+}
+
+/* Desktop: the choices and the button in a sidebar, the ballot beside it. */
+.wide {
+  display: grid;
+  grid-template-columns: 19rem minmax(0, 1fr);
+  gap: 4rem;
+  align-items: start;
+}
+
+.side {
+  display: block;
+}
+
+.header {
+  margin-block-end: 0.75rem;
+}
+
+/* The boteco scene in the sidebar's free space, fading in from above. */
+.sideArt {
+  inline-size: 14.75rem;
+  margin-block-start: var(--space-4);
+  opacity: 0.34;
+  pointer-events: none;
+  user-select: none;
+  mask-image: linear-gradient(transparent, #000 30%);
+}
+
+/* "Escolha duas leituras", who voted, and the Lista | Cartas toggle. */
+.viewbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.viewbar h2 {
+  font: 650 1.0625rem var(--sans);
+  letter-spacing: -0.015em;
+}
+
+.viewbar p {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.wide .viewbar {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.875rem;
+}
+
+.tip {
+  margin-block-start: 0.5rem;
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.toggle {
+  display: inline-grid;
+  flex: none;
+  grid-auto-flow: column;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+}
+
+.toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  block-size: 2rem;
+  padding: 0 0.6875rem;
+  border: 0;
+  background: transparent;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.toggle button + button {
+  border-inline-start: 1px solid var(--ink);
+}
+
+.toggle .on {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.toggle button:focus-visible {
+  outline-offset: 2px;
+}
+
+/* Sidebar summary: the two slots, numbered like the boxes in the list. */
+.summary {
+  margin-block-start: 1.75rem;
+  border-block-start: 1px solid var(--ink);
+}
+
+.summary > button {
+  margin-block-start: 1.25rem;
+}
+
+.summaryHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-block-size: 2.0625rem;
+  padding-block: 0.75rem 0.375rem;
+}
+
+.summaryHeading h3 {
+  color: var(--ink-2);
+  font: 600 var(--text-xs) var(--sans);
+  letter-spacing: 0.01em;
+}
+
+.slots {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slots li {
+  display: grid;
+  grid-template-columns: 1.375rem minmax(0, 1fr);
+  gap: 0.625rem;
+  align-items: center;
+}
+
+.slots li {
+  padding-block: 0.5625rem;
+  border-block-end: 1px solid var(--line);
+  font-size: var(--text-ui);
+  font-weight: 600;
+}
+
+.slots i {
+  display: grid;
+  place-items: center;
+  inline-size: 1.375rem;
+  block-size: 1.375rem;
+  background: var(--yes);
+  color: var(--paper);
+  font: normal 700 0.75rem / 1 var(--sans);
+}
+
+.slots .empty {
+  color: var(--ink-2);
+  font-weight: 450;
+}
+
+.slots .empty i {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--line-2);
+  color: var(--ink-2);
+}
+
+.note {
+  margin-block-start: 0.75rem;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+
+.swap {
+  display: grid;
+  place-items: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.swap:hover {
+  color: var(--ink);
+}
+
+/* Phone: pinned above the tab bar, ruled like the list. */
+.bar {
+  position: sticky;
+  inset-block-end: calc(var(--tabbar-height) + env(safe-area-inset-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-block-size: var(--ballotbar-height);
+  margin-inline: calc(-1 * var(--gutter));
+  padding: 0.75rem var(--gutter);
+  border-block-start: 1px solid var(--ink);
+  background: var(--paper);
+}
+
+.count {
+  flex: 1;
+  color: var(--ink-2);
+  font-size: 0.84375rem;
+}
+
+.count b {
+  margin-inline-end: 3px;
+  color: var(--ink);
+  font: 650 1.5rem var(--serif);
+}
+
+.confirmList {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.confirmList b {
+  color: var(--ink);
+}
+
+/* After voting, or once voting closed: a calm note above the readings. */
+.done {
+  display: grid;
+  gap: var(--space-6);
+  max-inline-size: 42rem;
+}
+
+.waiting {
+  max-inline-size: 32rem;
+  padding: var(--space-3) var(--space-4);
+  border-inline-start: 3px solid var(--yes);
+  background: var(--yes-soft);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+
+.waitingTitle {
+  color: var(--ink);
+  font-size: var(--text-body);
+  font-weight: 650;
+}
+
+@media (min-width: 60rem) {
+  .bar {
+    display: none;
+  }
+
+  .stage {
+    padding-block-start: 0.5rem;
+  }
+}

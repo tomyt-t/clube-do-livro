@@ -22,7 +22,8 @@ body {
   font-family: var(--sans);
   font-size: var(--text-body);
   font-weight: 450;
-  line-height: 1.55;
+  /* The font's own line height; long texts set theirs where they need it. */
+  line-height: normal;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }

@@ -1,6 +1,13 @@
-import type { Cycle, DecisionMethod, Nomination, VoteResults } from '@/domain/types';
+import type { Cycle, DecisionMethod, VoteResults } from '@/domain/types';
 
 import { DEMO_BOOKS } from './books';
+import {
+  daysAgo,
+  nominations,
+  seedCurrentCycle,
+  type BookKey,
+  type DemoScenario,
+} from './scenarios';
 import type { DemoPersona, DemoState } from './state';
 
 export const DEMO_PERSONAS: readonly DemoPersona[] = [
@@ -16,18 +23,6 @@ export const DEMO_PERSONAS: readonly DemoPersona[] = [
 /** Marina organizes the club; the visitor is not on the allowlist. */
 export const DEMO_ADMIN = 'marina';
 const OUTSIDER = 'visitante';
-
-type BookKey = keyof typeof DEMO_BOOKS;
-
-const DAY = 24 * 60 * 60 * 1000;
-
-function daysAgo(now: Date, days: number): Date {
-  return new Date(now.getTime() - days * DAY);
-}
-
-function nominations(keys: BookKey[]): Nomination[] {
-  return keys.map((key) => ({ id: key, book: DEMO_BOOKS[key] }));
-}
 
 interface PastCycle {
   id: string;
@@ -112,34 +107,10 @@ function seedPastCycle(state: DemoState, now: Date, past: PastCycle) {
   state.tallies[past.id] = cycle.results ?? undefined;
 }
 
-/** Cycle 4 is collecting nominations; Marina has not answered yet. */
-function seedOpenCycle(state: DemoState, now: Date) {
-  state.cycles.c4 = {
-    id: 'c4',
-    number: 4,
-    status: 'nominating',
-    responses: 3,
-    nominationDeadline: new Date(now.getTime() + 3 * DAY),
-    votingDeadline: null,
-    createdAt: daysAgo(now, 2),
-    options: [],
-    ballots: 0,
-    votingOpenedAt: null,
-    votingClosedAt: null,
-    results: null,
-    winner: null,
-    readingStartedAt: null,
-    finishedAt: null,
-  };
-  state.nominations.c4 = nominations(['ensaio', 'bras']);
-  state.answers.c4 = {
-    rafa: { kind: 'nominated', nominationId: 'ensaio' },
-    julia: { kind: 'nominated', nominationId: 'bras' },
-    teo: { kind: 'passed' },
-  };
-}
-
-export function createDemoState(now: Date = new Date()): DemoState {
+export function createDemoState(
+  now: Date = new Date(),
+  scenario: DemoScenario = 'nominating',
+): DemoState {
   const state: DemoState = {
     session: null,
     allowlist: {},
@@ -157,7 +128,7 @@ export function createDemoState(now: Date = new Date()): DemoState {
   PAST_CYCLES.forEach((past) => {
     seedPastCycle(state, now, past);
   });
-  seedOpenCycle(state, now);
+  seedCurrentCycle(state, now, scenario);
   return state;
 }
 

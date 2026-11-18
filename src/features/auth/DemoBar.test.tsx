@@ -24,6 +24,9 @@ describe('DemoBar', () => {
     await user.selectOptions(select, 'Marina (organiza)');
     expect(await screen.findByText('Área dos membros')).toBeInTheDocument();
 
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Etapa' }), 'Votação');
+    expect(screen.getByRole('combobox', { name: 'Etapa' })).toHaveValue('voting');
+
     await user.selectOptions(select, 'Ninguém');
     expect(await screen.findByRole('button', { name: 'Entrar com Google' })).toBeInTheDocument();
   });

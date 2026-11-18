@@ -68,3 +68,10 @@
 .block {
   inline-size: 100%;
 }
+
+/* Beside a line of text, as in "Próxima leitura": 44px tall. */
+.compact {
+  min-block-size: 2.75rem;
+  padding-inline: 1.125rem;
+  font-size: 0.90625rem;
+}

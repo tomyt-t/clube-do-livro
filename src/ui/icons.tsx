@@ -87,3 +87,62 @@ export function ShelfIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function ListIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </Icon>
+  );
+}
+
+export function CardsIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6 4h12v14H6Z" />
+      <path d="M8 21h8" />
+    </Icon>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m4.5 12.5 5 5 10-11" />
+    </Icon>
+  );
+}
+
+export function CrossIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6 6l12 12M18 6 6 18" />
+    </Icon>
+  );
+}
+
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m15 5-7 7 7 7" />
+    </Icon>
+  );
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m9 5 7 7-7 7" />
+    </Icon>
+  );
+}
+
+/** Two arrows passing each other: swap the order of the choices. */
+export function SwapIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 4v15M4.5 15.5 8 19l3.5-3.5" />
+      <path d="M16 20V5M12.5 8.5 16 5l3.5 3.5" />
+    </Icon>
+  );
+}
