@@ -2,7 +2,6 @@ import { isPastDeadline } from '@/domain/cycle';
 import { isSecureLink, normalizeBook, validateBook } from '@/domain/book';
 import { ballotSeat, isLetGo, isReadingNominator } from '@/domain/review';
 import { addBallot } from '@/domain/tally';
-import { titleKey } from '@/domain/title-key';
 import type { Cycle, CycleId, NominationAnswer, NominationId, VoteResults } from '@/domain/types';
 import { hasRoomForNomination, ownNominationOf, validateBallot } from '@/domain/voting';
 
@@ -65,11 +64,6 @@ function isOwnNomination(state: DemoState, cycleId: CycleId, nominationId: Nomin
   return ownNominationOf(answer ?? null) === nominationId;
 }
 
-function isTitleTakenIn(state: DemoState, cycleId: CycleId, title: string): boolean {
-  const key = titleKey(title);
-  return (state.nominations[cycleId] ?? []).some(({ book }) => titleKey(book.title) === key);
-}
-
 function cycleOf(context: DemoContext, cycleId: CycleId): Cycle {
   return context.store.current.cycles[cycleId] ?? deny();
 }
@@ -98,13 +92,8 @@ function assertCanAnswer(context: DemoContext, { cycleId, uid, answer }: AnswerI
   const cycle = cycleOf(context, cycleId);
   const full = answer.kind === 'nominate' && !hasRoomForNomination(cycle.nominationIds);
   if (!isOpenTo(context, cycle, uid)) deny();
+  // A reading nominated twice is welcome: the check after the call sorts it out.
   if (full) deny();
-  if (
-    answer.kind === 'nominate' &&
-    isTitleTakenIn(context.store.current, cycleId, answer.book.title)
-  ) {
-    deny();
-  }
 }
 
 /** The choices fit the member's seat: never their own reading, one fewer if theirs was merged. */
@@ -135,7 +124,7 @@ function assertCanVote(context: DemoContext, input: BallotInput): VoteResults {
 /** Nominations, read the way the rules allow: hidden until the vote opens. */
 function nominationReads(
   context: DemoContext,
-): Pick<ClubPort, 'watchNominations' | 'watchOwnNomination' | 'isTitleTaken'> {
+): Pick<ClubPort, 'watchNominations' | 'watchOwnNomination'> {
   return {
     watchNominations: (cycleId, subscriber) =>
       watchGuarded(
@@ -159,12 +148,6 @@ function nominationReads(
         },
         subscriber,
       ),
-
-    isTitleTaken: async (cycleId, title) => {
-      await pause(context);
-      requireMember(context);
-      return isTitleTakenIn(context.store.current, cycleId, title);
-    },
   };
 }
 

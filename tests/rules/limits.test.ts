@@ -10,7 +10,7 @@ import { drawOrder, drawWinner } from '@/domain/draw';
 import type { DecisionMethod, NominationId, VoteResults } from '@/domain/types';
 import { ballotOptions, MAX_MERGED, openingResults } from '@/domain/review';
 import { MAX_OPTIONS } from '@/domain/voting';
-import { declareWinner, startVoting } from '@/services/firebase/flow-writes';
+import { declareWinner, recordReview, startVoting } from '@/services/firebase/flow-writes';
 import { answerNominationCall, castBallot } from '@/services/firebase/member-writes';
 
 import {
@@ -173,5 +173,24 @@ describe('merged readings at the largest ballot', () => {
       votingDeadline: null,
     };
     await assertSucceeds(startVoting(dbAs(env, caio), input));
+  });
+});
+
+describe('the check at the largest round', () => {
+  it('records four merges of its own and a flagged pair at once', async () => {
+    const ids = Array.from(
+      { length: MAX_OPTIONS },
+      (_, i): NominationId => `Reading${String(i).padStart(13, '0')}`,
+    );
+    await seedAnswered(env, {
+      nominationIds: ids,
+      responses: MAX_OPTIONS,
+      review: { ids: null, groups: [] },
+    });
+    const at = (i: number) => ids[i] ?? '';
+    // The last four, each into an earlier one; the first two flagged for the organizer.
+    const merged = Object.fromEntries([12, 13, 14, 15].map((i) => [at(i), at(i - 10)]));
+    const flags = [{ ids: [at(0), at(1)], reason: 'Talvez a mesma obra.' }];
+    await assertSucceeds(recordReview(dbAs(env, caio), CYCLE, flags, merged));
   });
 });

@@ -1,6 +1,4 @@
-import { getDoc, orderBy, query } from 'firebase/firestore';
-
-import { titleKey } from '@/domain/title-key';
+import { orderBy, query } from 'firebase/firestore';
 
 import type { ClubPort } from '../backend';
 
@@ -34,9 +32,6 @@ export function createFirebaseClub({ db }: FirebaseServices): ClubPort {
         },
         subscriber,
       ),
-
-    isTitleTaken: (cycleId, title) =>
-      guard(getDoc(refs.title(db, cycleId, titleKey(title))).then((found) => found.exists())),
 
     watchOwnAnswer: (cycleId, uid, subscriber) =>
       listenToDoc(

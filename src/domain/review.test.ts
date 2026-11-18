@@ -59,11 +59,11 @@ describe('merging', () => {
     expect(isLetGo(null, cycle)).toBe(false);
   });
 
-  it('gives a merged reading a head start of one first choice per nominator', () => {
+  it('gives a merged reading a head start of one first choice per later nomination', () => {
     const merged = { c: 'a', d: 'a' };
     expect(openingResults(['a', 'b'], merged)).toEqual({
-      votes: { a: 3, b: 0 },
-      firsts: { a: 3, b: 0 },
+      votes: { a: 2, b: 0 },
+      firsts: { a: 2, b: 0 },
     });
     expect(openingResults(['a', 'b'], {})).toEqual({
       votes: { a: 0, b: 0 },
@@ -76,22 +76,28 @@ describe('a merged nominator on the ballot', () => {
   const merged = { c: 'a' };
   const options = ballotOptions(NOMINATIONS, merged);
 
-  it('cannot vote for the reading their nomination became, and picks one', () => {
-    for (const own of ['a', 'c']) {
-      const seat = ballotSeat(own, merged);
-      expect(seat).toEqual({ own: 'a', merged: true });
-      expect(requiredChoices(options, seat.own, seat.merged)).toBe(1);
-      expect(validateBallot(options, seat.own, ['b'], seat.merged)).toBeNull();
-      expect(validateBallot(options, seat.own, ['a'], seat.merged)).toBe('own-nomination');
-      expect(validateBallot(options, seat.own, ['b', 'd'], seat.merged)).toBe('wrong-count');
-    }
+  it('who nominated it later cannot vote for it, and picks one', () => {
+    const seat = ballotSeat('c', merged);
+    expect(seat).toEqual({ own: 'a', merged: true });
+    expect(requiredChoices(options, seat.own, seat.merged)).toBe(1);
+    expect(validateBallot(options, seat.own, ['b'], seat.merged)).toBeNull();
+    expect(validateBallot(options, seat.own, ['a'], seat.merged)).toBe('own-nomination');
+    expect(validateBallot(options, seat.own, ['b', 'd'], seat.merged)).toBe('wrong-count');
+  });
+
+  it('who nominated it first votes as usual, never for it', () => {
+    const seat = ballotSeat('a', merged);
+    expect(seat).toEqual({ own: 'a', merged: false });
+    expect(requiredChoices(options, seat.own, seat.merged)).toBe(2);
+    expect(validateBallot(options, seat.own, ['b', 'd'], seat.merged)).toBeNull();
+    expect(validateBallot(options, seat.own, ['a', 'b'], seat.merged)).toBe('own-nomination');
   });
 
   it('adds a vote without a first choice', () => {
     const start = openingResults(options, merged);
     expect(addBallot(start, ['b'], false)).toEqual({
-      votes: { a: 2, b: 1, d: 0 },
-      firsts: { a: 2, b: 0, d: 0 },
+      votes: { a: 1, b: 1, d: 0 },
+      firsts: { a: 1, b: 0, d: 0 },
     });
   });
 

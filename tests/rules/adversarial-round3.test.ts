@@ -182,7 +182,7 @@ describe('answering again after a let-go', () => {
     // The count says everyone answered: the club's own flow runs, here from Caio's app.
     const db = dbAs(env, caio);
     await startReview(db, CYCLE);
-    await recordReview(db, CYCLE, []);
+    await recordReview(db, CYCLE, [], {});
     const options = [ID.bia, ID.org, ID.ana];
     const opening = openingResults(options, {});
     await startVoting(db, { cycleId: CYCLE, options, opening, votingDeadline: null });
@@ -322,7 +322,7 @@ describe("the round's flags", () => {
     // Flagging Bia's too would make three of three: over the cap, and the old flags stay.
     const again = flaggedReview([ID.bia, ID.org]);
     await assertFails(updateDoc(cycleRef(db), { ...again, flagged: [ID.org, ID.bia] }));
-    await assertFails(recordReview(db, CYCLE, again.review.groups));
+    await assertFails(recordReview(db, CYCLE, again.review.groups, {}));
   });
 });
 
@@ -408,7 +408,7 @@ describe('the expression budget at the largest round, with the new checks', () =
       { ids: [at(3), at(4), at(5)], reason: 'r'.repeat(200) },
       { ids: [at(6), at(7)], reason: 'r'.repeat(200) },
     ];
-    await assertSucceeds(recordReview(asAdmin(), CYCLE, groups));
+    await assertSucceeds(recordReview(asAdmin(), CYCLE, groups, {}));
   });
 
   it('held: the organizer merges three readings into one, reaching the most merges', async () => {

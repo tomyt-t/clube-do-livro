@@ -15,7 +15,7 @@ import {
 export function createFirebaseFlow({ db }: FirebaseServices): FlowPort {
   return {
     startReview: (cycleId) => guard(startReview(db, cycleId)),
-    recordReview: (cycleId, groups) => guard(recordReview(db, cycleId, groups)),
+    recordReview: (cycleId, groups, merged) => guard(recordReview(db, cycleId, groups, merged)),
     startVoting: (input) => guard(startVoting(db, input)),
     closeVoting: (cycleId) => guard(closeVoting(db, cycleId)),
     readResults: (cycleId) => guard(readResults(db, cycleId)),

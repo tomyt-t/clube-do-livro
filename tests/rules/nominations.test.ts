@@ -26,7 +26,6 @@ import {
   admin,
   ana,
   bia,
-  caio,
   createEnv,
   CYCLE,
   dbAs,
@@ -73,15 +72,13 @@ async function rawNominate(
   db: Firestore,
   uid: string,
   book: Record<string, unknown>,
-  options: { nominationId?: string; key?: string; titleDoc?: string } = {},
+  options: { nominationId?: string; key?: string } = {},
 ) {
   // Ids in the app's format: 20 letters and digits.
   const fallbackId = `raw${uid.replace(/[^A-Za-z0-9]/g, '')}`.padEnd(20, '0').slice(0, 20);
   const { nominationId = fallbackId, key = `titulo ${uid}` } = options;
-  const titleDoc = options.titleDoc ?? key;
   const batch = writeBatch(db);
   batch.set(doc(db, 'cycles', CYCLE, 'nominations', nominationId), { book, titleKey: key });
-  batch.set(doc(db, 'cycles', CYCLE, 'titles', titleDoc), {});
   batch.set(doc(db, 'cycles', CYCLE, 'answers', uid), { nominationId });
   batch.update(doc(db, 'cycles', CYCLE), {
     responses: increment(1),
@@ -146,48 +143,26 @@ describe('hidden nominations', () => {
   });
 });
 
-describe('one nomination per title', () => {
-  const titleOf = (persona: Persona, key: string) =>
-    getDoc(doc(dbAs(env, persona), 'cycles', CYCLE, 'titles', key));
-
-  it('blocks the same title written another way, but not a different one', async () => {
+describe('a reading nominated twice', () => {
+  it('is taken: the check after the call sorts it out', async () => {
     await nominate(ana, makeBook({ title: 'Dom Casmurro, Machado de Assis' }));
-    await assertFails(nominate(bia, makeBook({ title: 'dom casmurro / MACHADO DE ASSIS' })));
-    await assertSucceeds(pass(bia));
-    await assertSucceeds(nominate(caio, makeBook({ title: 'Dom Casmurro' })));
+    await assertSucceeds(nominate(bia, makeBook({ title: 'dom casmurro / MACHADO DE ASSIS' })));
   });
 
-  it('lets a member check a title, but nobody list them', async () => {
-    await nominate(ana, makeBook({ title: 'Dom Casmurro' }));
-    const taken = await assertSucceeds(titleOf(bia, titleKey('Dom Casmurro')));
-    expect(taken.exists()).toBe(true);
-    await assertFails(getDocs(collection(dbAs(env, admin), 'cycles', CYCLE, 'titles')));
-  });
-
-  it('blocks title records that do not match a new nomination', async () => {
+  it('still needs a well-formed title key', async () => {
     const db = dbAs(env, ana);
-    // A key the nomination does not carry.
-    await assertFails(rawNominate(db, ana.uid, { ...makeBook() }, { titleDoc: 'outro titulo' }));
-    // A key with loose spaces, with or without its record; no key, or one with a slash.
-    for (const key of [' torto', 'torto  arado']) {
+    for (const key of [' torto', 'torto  arado', '', 'a/b']) {
       await assertFails(rawNominate(db, ana.uid, { ...makeBook() }, { key }));
     }
-    for (const key of ['', 'a/b']) {
-      await assertFails(rawNominate(db, ana.uid, { ...makeBook() }, { key, titleDoc: 'torto' }));
-    }
-    // A record with something in it, or alone.
-    await assertFails(setDoc(doc(db, 'cycles', CYCLE, 'titles', 'solto'), {}));
-    const batch = writeBatch(db);
-    batch.set(doc(db, 'cycles', CYCLE, 'titles', 'cheio'), { by: ana.uid });
-    batch.set(doc(db, 'cycles', CYCLE, 'answers', ana.uid), { nominationId: null });
-    batch.update(doc(db, 'cycles', CYCLE), { responses: increment(1) });
-    await assertFails(batch.commit());
   });
 
-  it('blocks editing or deleting a title record', async () => {
-    await nominate(ana, makeBook({ title: 'Dom Casmurro' }));
-    const record = doc(dbAs(env, ana), 'cycles', CYCLE, 'titles', titleKey('Dom Casmurro'));
-    await assertFails(setDoc(record, {}));
+  it('leaves the old title records out of reach', async () => {
+    const key = titleKey('Dom Casmurro');
+    await withoutRules(env, (db) => setDoc(doc(db, 'cycles', CYCLE, 'titles', key), {}));
+    const record = doc(dbAs(env, ana), 'cycles', CYCLE, 'titles', key);
+    await assertFails(getDoc(record));
+    await assertFails(getDocs(collection(dbAs(env, admin), 'cycles', CYCLE, 'titles')));
+    await assertFails(setDoc(doc(dbAs(env, ana), 'cycles', CYCLE, 'titles', 'novo'), {}));
     await assertFails(deleteDoc(record));
   });
 });

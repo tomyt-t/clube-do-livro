@@ -86,18 +86,41 @@ describe('the list during the review', () => {
   it('records only real nominations, once, and only after it started', async () => {
     await seedAnswered(env);
     const db = dbAs(env, admin);
-    await assertFails(recordReview(db, CYCLE, FLAGGED));
+    await assertFails(recordReview(db, CYCLE, FLAGGED, {}));
     await startReview(db, CYCLE);
-    await assertFails(recordReview(db, CYCLE, [{ ids: [N_ANA, 'made-up'], reason: '' }]));
-    await assertSucceeds(recordReview(db, CYCLE, FLAGGED));
+    await assertFails(recordReview(db, CYCLE, [{ ids: [N_ANA, 'made-up'], reason: '' }], {}));
+    await assertSucceeds(recordReview(db, CYCLE, FLAGGED, {}));
     // Once recorded, a member cannot wipe it (the organizer dismissing every group is an edit).
-    await assertFails(recordReview(dbAs(env, caio), CYCLE, []));
+    await assertFails(recordReview(dbAs(env, caio), CYCLE, [], {}));
+  });
+
+  it('merges the same work on its own, always a later nomination into an earlier one', async () => {
+    await seedAnswered(env, { review: { ids: null, groups: [] } });
+    const db = dbAs(env, caio);
+    // Bia's (later) into Ana's (first), never the other way, nor a flagged one.
+    await assertFails(recordReview(db, CYCLE, [], { [N_ANA]: N_BIA }));
+    await assertFails(recordReview(db, CYCLE, FLAGGED, { [N_BIA]: N_ANA }));
+    await assertSucceeds(recordReview(db, CYCLE, [], { [N_BIA]: N_ANA }));
+  });
+
+  it('never merges more than four at once', async () => {
+    const ids = Array.from({ length: 10 }, (_, i) => `Reading${String(i).padStart(13, '0')}`);
+    await seedAnswered(env, {
+      nominationIds: ids,
+      responses: 10,
+      review: { ids: null, groups: [] },
+    });
+    const into = (n: number) =>
+      Object.fromEntries(ids.slice(1, n + 1).map((id) => [id, ids[0] ?? '']));
+    const db = dbAs(env, caio);
+    await assertFails(recordReview(db, CYCLE, [], into(5)));
+    await assertSucceeds(recordReview(db, CYCLE, [], into(4)));
   });
 
   it("lets any member's device record what the check found, flags included", async () => {
     await seedAnswered(env, { review: { ids: null, groups: [] } });
-    await assertSucceeds(recordReview(dbAs(env, caio), CYCLE, FLAGGED));
-    await assertFails(recordReview(dbAs(env, caio), CYCLE, []));
+    await assertSucceeds(recordReview(dbAs(env, caio), CYCLE, FLAGGED, {}));
+    await assertFails(recordReview(dbAs(env, caio), CYCLE, [], {}));
   });
 
   it('starts only once everyone answered, even for the organizer', async () => {
@@ -108,7 +131,7 @@ describe('the list during the review', () => {
   it('never flags in big groups, overlapping groups or most of the list', async () => {
     await seedAnswered(env, { review: { ids: null, groups: [] } });
     const db = dbAs(env, admin);
-    const record = (groups: ConflictGroup[]) => recordReview(db, CYCLE, groups);
+    const record = (groups: ConflictGroup[]) => recordReview(db, CYCLE, groups, {});
     await assertFails(record([{ ids: ALL_NOMINATIONS, reason: '' }]));
     await assertFails(
       record([
@@ -125,9 +148,10 @@ describe('sorting out flagged readings', () => {
   const update = (persona: Persona, groups: ConflictGroup[], merged: Merged) =>
     updateReview(dbAs(env, persona), { cycleId: CYCLE, groups, merged });
 
-  it('is up to the organizer alone, and merges only once the check is done', async () => {
+  it('is up to the organizer alone once the check is recorded', async () => {
+    // Recording the check may merge on its own, but only a later nomination into an earlier one.
     await seedAnswered(env, { review: { ids: null, groups: [] } });
-    await assertFails(update(admin, [], { [N_BIA]: N_ANA }));
+    await assertFails(update(admin, [], { [N_ANA]: N_BIA }));
     await seedAnswered(env, flaggedReview);
     await assertFails(update(ana, [], {}));
     await assertSucceeds(update(admin, [], {}));
@@ -230,17 +254,19 @@ describe('a ballot with merged readings', () => {
     );
   });
 
-  it('lets merged nominators pick one other reading, without a first choice', async () => {
+  it('lets the first nominator vote as usual, and later ones pick one without a first choice', async () => {
     const start = openingResults(options, merged);
     await seedVoting(env, { options, votes: start.votes, firsts: start.firsts, cycle: { merged } });
     const vote = (persona: Persona, choices: NominationId[], countsFirst: boolean) =>
       castBallot(dbAs(env, persona), { cycleId: CYCLE, uid: persona.uid, choices, countsFirst });
 
-    for (const persona of [ana, bia]) {
-      await assertFails(vote(persona, [N_ANA], false));
-      await assertFails(vote(persona, [N_ADMIN], true));
-    }
-    await assertSucceeds(vote(ana, [N_ADMIN], false));
+    // Ana nominated it first: as usual, never for it (here one other book, as first choice).
+    await assertFails(vote(ana, [N_ANA], true));
+    await assertFails(vote(ana, [N_ADMIN], false));
+    await assertSucceeds(vote(ana, [N_ADMIN], true));
+    // Bia's came later: it already counts as her first choice.
+    await assertFails(vote(bia, [N_ANA], false));
+    await assertFails(vote(bia, [N_ADMIN], true));
     await assertSucceeds(vote(bia, [N_ADMIN], false));
     await assertFails(vote(caio, [N_ADMIN], false));
     await assertSucceeds(vote(caio, [N_ADMIN, N_ANA], true));

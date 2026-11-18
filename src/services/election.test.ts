@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FlowStep } from '@/domain/flow';
-import { openingResults, type ConflictGroup } from '@/domain/review';
+import { openingResults, type ConflictGroup, type Merged } from '@/domain/review';
 import type { Cycle } from '@/domain/types';
 import { drawNumber } from '@/domain/draw';
 import { makeBook, makeCycle } from '@/test/factories';
@@ -192,8 +192,12 @@ describe('the review before the vote', () => {
     await settle(backend);
     let cycle = await cycleOf(backend, cycleId);
     expect(cycle.status).toBe('nominating');
+    // Same title, one without the author: maybe the same work, so the organizer decides.
     expect(cycle.review?.conflicts).toEqual([
-      { ids: [dom, twice], reason: 'Mesmo título: Dom Casmurro.' },
+      {
+        ids: [dom, twice],
+        reason: 'Mesmo título, com autor diferente ou sem autor: Dom Casmurro.',
+      },
     ]);
 
     await backend.admin.updateReview({ cycleId, groups: [], merged: { [twice]: dom } });
@@ -202,8 +206,12 @@ describe('the review before the vote', () => {
     expect(cycle.status).toBe('voting');
     expect(cycle.options).toEqual([dom, torto]);
 
-    // Rafa and Júlia already count as Dom Casmurro's first choices: one more pick each.
-    await voteAs(backend, { cycleId, uid: 'rafa', choices: [torto], countsFirst: false });
+    // Rafa nominated it first and votes as usual (never for it); Júlia's nomination
+    // came later, so it already counts as her first choice: one more pick.
+    await expect(
+      voteAs(backend, { cycleId, uid: 'rafa', choices: [torto], countsFirst: false }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    await voteAs(backend, { cycleId, uid: 'rafa', choices: [torto] });
     await voteAs(backend, { cycleId, uid: 'julia', choices: [torto], countsFirst: false });
     await expect(
       voteAs(backend, { cycleId, uid: 'teo', choices: [dom, torto], countsFirst: true }),
@@ -216,10 +224,10 @@ describe('the review before the vote', () => {
 
     cycle = await cycleOf(backend, cycleId);
     expect(cycle.results).toEqual({
-      votes: { [dom]: 6, [torto]: 5 },
-      firsts: { [dom]: 3, [torto]: 3 },
+      votes: { [dom]: 5, [torto]: 5 },
+      firsts: { [dom]: 2, [torto]: 4 },
     });
-    expect(cycle.winner?.nominationId).toBe(dom);
+    expect(cycle.winner?.nominationId).toBe(torto);
   });
 });
 
@@ -241,19 +249,19 @@ describe('the duplicate check', () => {
     nomination('gone', 'Dom Casmurro (edição antiga)'),
   ];
 
-  async function check(cycle: Partial<Cycle>, groups: ConflictGroup[]) {
+  async function check(cycle: Partial<Cycle>, unsure: ConflictGroup[], same: ConflictGroup[] = []) {
     const seen: string[][] = [];
-    const recorded: ConflictGroup[][] = [];
+    const recorded: { flags: ConflictGroup[]; merged: Merged }[] = [];
     const flow = {
-      recordReview: (_id: string, found: readonly ConflictGroup[]) => {
-        recorded.push([...found]);
+      recordReview: (_id: string, flags: readonly ConflictGroup[], merged: Merged) => {
+        recorded.push({ flags: [...flags], merged });
         return Promise.resolve();
       },
     } as unknown as FlowPort;
     const checker = {
       findDuplicates: (list: readonly { id: string }[]) => {
         seen.push(list.map(({ id }) => id));
-        return Promise.resolve(groups);
+        return Promise.resolve({ same, unsure });
       },
     };
     const step = { kind: 'check', cycle: makeCycle({ nominationIds: ['a', 'b', 'c'], ...cycle }) };
@@ -262,7 +270,7 @@ describe('the duplicate check', () => {
       nominations: LIST,
       checker,
     });
-    return { seen: seen[0], recorded: recorded[0] };
+    return { seen: seen[0], recorded: recorded[0]?.flags, merged: recorded[0]?.merged };
   }
 
   it('checks only what would be on the ballot', async () => {
@@ -275,5 +283,20 @@ describe('the duplicate check', () => {
     const settled = { ids: ['a', 'b'], reason: 'Mesmo título.' };
     expect((await check({ flagged: ['a', 'b'] }, [settled])).recorded).toEqual([]);
     expect((await check({ flagged: ['a'] }, [settled])).recorded).toEqual([settled]);
+  });
+
+  it('merges the same work into its first nomination, on its own', async () => {
+    const same = [{ ids: ['c', 'a'], reason: 'Mesma obra.' }];
+    const { recorded, merged } = await check({}, [], same);
+    expect(merged).toEqual({ c: 'a' });
+    expect(recorded).toEqual([]);
+  });
+
+  it('leaves to the organizer a merge it cannot make on its own', async () => {
+    // b already took c in: merging a and b would move that earlier merge.
+    const same = [{ ids: ['a', 'b'], reason: 'Mesma obra.' }];
+    const { recorded, merged } = await check({ merged: { c: 'b' } }, [], same);
+    expect(merged).toEqual({ c: 'b' });
+    expect(recorded).toEqual(same);
   });
 });

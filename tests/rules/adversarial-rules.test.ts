@@ -254,7 +254,7 @@ describe('stuffing the review record to fill the cycle document', () => {
     // with junk, open the vote. The review can never change after that.
     await startReview(db, CYCLE);
     await updateDoc(cycleRef(db), { review: { ids: [], groups: ['x'.repeat(junk)] } }).catch(() =>
-      recordReview(db, CYCLE, []),
+      recordReview(db, CYCLE, [], {}),
     );
     await openVote(ALL_NOMINATIONS);
     await everyoneVotes(
@@ -295,7 +295,7 @@ describe('nomination ids chosen by the member', () => {
     const options = (await getDoc(cycleRef(dbAs(env, caio)))).get('nominationIds') as string[];
     const db = dbAs(env, caio);
     await startReview(db, CYCLE);
-    await recordReview(db, CYCLE, []);
+    await recordReview(db, CYCLE, [], {});
     await openVote(options);
     await everyoneVotes(
       options,

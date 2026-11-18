@@ -36,7 +36,8 @@ describe('ConflictsPanel', () => {
   it('merges a group into one reading with a head start, and clears the review', async () => {
     const { user, backend } = renderReview();
     await user.click(await within(await panel()).findByRole('button', { name: 'Juntar numa só' }));
-    expect(screen.getByText(/já começa com 2 votos de 1ª opção/)).toBeInTheDocument();
+    expect(screen.getByText(/Fica a indicação de quem indicou primeiro/)).toBeInTheDocument();
+    expect(screen.getByText(/começa com 1 voto de 1ª opção/)).toBeInTheDocument();
     await confirm(user, 'Juntar');
 
     expect(await screen.findByText(/Nenhuma indicação repetida/)).toBeInTheDocument();

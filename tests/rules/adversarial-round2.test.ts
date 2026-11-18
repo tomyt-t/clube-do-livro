@@ -195,7 +195,7 @@ describe('flags the organizer records', () => {
     const db = asAdmin();
     await startReview(db, CYCLE);
     // No check flagged anything: the organizer's device records its own "conflict".
-    await recordReview(db, CYCLE, [{ ids: [N_BIA, N_ADMIN], reason: 'A mesma obra.' }]);
+    await recordReview(db, CYCLE, [{ ids: [N_BIA, N_ADMIN], reason: 'A mesma obra.' }], {});
     await reopenNominations(db, { cycleId: CYCLE, nominationIds: [N_BIA] });
     // Bia never gets the chance to nominate again (a past nomination deadline does the same).
     const options = [N_ANA, N_ADMIN];
@@ -223,7 +223,7 @@ describe('flags the organizer records', () => {
     const learned = new Set<string>();
     const learn = async (flags: NominationId[]) => {
       await startReview(db, CYCLE).catch(() => undefined);
-      await recordReview(db, CYCLE, [{ ids: flags, reason: '' }]).catch(() => undefined);
+      await recordReview(db, CYCLE, [{ ids: flags, reason: '' }], {}).catch(() => undefined);
       const found = await findNominators(db, CYCLE, flags);
       for (const uid of Object.values(found).flat()) learned.add(uid);
     };

@@ -169,10 +169,13 @@ O App Check impede que scripts fora do site usem o seu projeto Firebase.
 
 ### Conferência de indicações repetidas (Gemini)
 
-Quando todos respondem, a lista de indicações se abre e o site procura leituras indicadas duas
-vezes com nomes diferentes ("Dom Casmurro" e "Dom Casmurro, Machado de Assis"). O que ele achar
-fica marcado para quem organiza decidir: juntar numa só, liberar alguém para trocar ou manter
-separadas. Sem isto, a votação abre direto (títulos idênticos já são recusados no envio).
+Quando todos respondem, a lista de indicações se abre e o site procura o mesmo livro, do mesmo
+autor, indicado mais de uma vez, inclusive em outra tradução ou edição ("Os Miseráveis" e "Les
+Misérables"). Livros diferentes nunca viram um só, nem volumes de uma série ou livros da mesma
+franquia. O que for certo vira uma opção só, sozinho (fica a indicação de quem indicou
+primeiro); o que for dúvida fica para quem organiza decidir. Sem o Gemini, o site só reconhece
+título e autor idênticos como certos, e o mesmo título com autor diferente ou sem autor como
+dúvida.
 
 A conferência roda no aparelho do primeiro membro que abrir o site depois que todos responderem,
 e o resultado fica gravado; você não precisa estar on-line. Uma pessoa liberada para trocar

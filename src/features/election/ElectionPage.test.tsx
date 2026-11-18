@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Nomination, OwnAnswer } from '@/domain/types';
@@ -109,13 +109,14 @@ describe('ElectionPage, nominations', () => {
     expect(screen.queryByText(/Ensaio sobre a Cegueira/)).not.toBeInTheDocument();
   });
 
-  it('stops a title someone already nominated before searching covers', async () => {
+  it('takes a title someone already nominated: the check after the call sorts it out', async () => {
     const { user } = renderElection();
     await fillDetails(user, 'ensaio sobre a cegueira — JOSÉ SARAMAGO');
 
-    expect(await screen.findByText(/Já indicaram uma leitura com esse título/)).toBeInTheDocument();
-    expect(searchCovers).not.toHaveBeenCalled();
-    expect(screen.getByLabelText('Título / autor')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(searchCovers).toHaveBeenCalled();
+    });
+    expect(screen.queryByText(/Já indicaram/)).not.toBeInTheDocument();
   });
 
   it('asks before passing, and passing is final', async () => {

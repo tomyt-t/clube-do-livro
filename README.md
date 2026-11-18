@@ -12,13 +12,17 @@ colocar no ar está em [`docs/CONFIGURACAO.md`](docs/CONFIGURACAO.md).
   lista, e o aparelho continua conectado até a pessoa sair.
 - **Indicação.** Cada membro indica uma leitura (livro, mangá, quadrinho, o que for) ou passa a
   vez (até 16 leituras por rodada). A capa e a sinopse vêm dos catálogos (Open Library, AniList, Google Livros) ou do link da
-  Wikipédia. As indicações ficam escondidas até todos responderem, quem indicou nunca aparece, e
-  um título já indicado é recusado no envio.
-- **Conferência.** Quando todos respondem, a lista se abre para todos e o site procura leituras
-  indicadas duas vezes com outro nome (com o Gemini, se configurado). Quem organiza decide: juntar
-  numa só (que já começa com um voto de 1ª opção por pessoa que indicou), liberar alguém para
-  trocar ou manter separadas. Quem foi liberado indica de novo vendo a lista, e a votação espera
-  essa resposta por até 3 dias. Os outros membros só veem que houve um conflito.
+  Wikipédia. As indicações ficam escondidas até todos responderem e quem indicou nunca aparece.
+  Ninguém é barrado por indicar o mesmo livro que outra pessoa: a conferência resolve depois.
+- **Conferência.** Quando todos respondem, a lista se abre para todos e o site procura o mesmo
+  livro, do mesmo autor, indicado mais de uma vez, mesmo em outra tradução ou edição ("Os
+  Miseráveis" e "Les Misérables"). Livros diferentes nunca viram um só, nem volumes de uma série
+  ("Mercenários 1" e "2") ou livros da mesma franquia ("Harry Potter e a Pedra Filosofal" e "o
+  Cálice de Fogo"). Quando é certo que é o mesmo livro, ele vira uma opção só, sozinho: fica a
+  indicação de quem indicou primeiro, que vota normalmente; quem indicou depois tem a indicação
+  anulada e já vota nesse livro em 1ª opção, sobrando só a 2ª. Na dúvida, quem organiza decide
+  (e pode também liberar alguém para trocar a indicação). Sem o Gemini, só títulos e autores
+  idênticos contam como certos.
 - **Votação.** Em lista ou em cartas, cada um escolhe uma 1ª e uma 2ª opção, nunca a própria
   indicação. Vence quem tiver mais votos. Empatou, vence quem tiver mais votos de 1ª opção. Se
   ainda empatar, há um sorteio que qualquer um pode conferir.
@@ -39,9 +43,7 @@ Toda a segurança está em [`firestore.rules`](firestore.rules), com testes de a
   nem quem organiza vê as outras. A única exceção é a conferência: quem organiza pode ver quem
   indicou as leituras marcadas como repetidas (e só essas, no máximo três grupos pequenos),
   para conversar com essas pessoas. As regras limitam quantas leituras dá para marcar na rodada
-  inteira: um par, ou até metade da lista. Para
-  recusar um título repetido, cada título indicado deixa um registro que dá para consultar um a
-  um, mas nunca listar.
+  inteira: um par, ou até metade da lista.
 - **Votos:** cada cédula cria um recibo vazio (diz só _que_ a pessoa votou) e soma numa
   contagem que ninguém lê até a votação fechar. Nada liga uma pessoa ao voto dela.
 - **Uma pessoa, uma conta:** cada email da lista fica preso à primeira conta que entrou com
@@ -61,9 +63,12 @@ O que as regras não conseguem impedir, e por quê:
   votar outra vez na rodada) e decidir que duas leituras são a mesma. Ainda assim, as regras
   limitam quantas leituras dá para marcar por rodada e não deixam abrir a votação antes de quem
   foi liberado responder (ou de passarem 3 dias).
-- **A conferência com o Gemini roda no navegador:** um app adulterado pode pular essa etapa
-  (títulos idênticos continuam bloqueados pelas regras; só as variações escapariam) ou marcar
-  leituras à toa, dentro do limite da rodada, o que mostra a quem organiza quem as indicou.
+- **A conferência roda no navegador:** as regras não sabem dizer se dois títulos são o mesmo
+  livro. Um app adulterado pode pular a conferência (as repetidas vão separadas para a cédula),
+  marcar leituras à toa, dentro do limite da rodada (o que mostra a quem organiza quem as
+  indicou), ou juntar dois livros diferentes. Para isso as regras exigem que a indicação que
+  fica seja a mais antiga, no máximo quatro junções por vez e nunca uma leitura marcada para
+  quem organiza decidir.
 - **Contagem parcial:** ao votar, um app adulterado pode tentar valores até acertar a contagem
   atual das leituras em que votou. Fica sabendo só disso, só uma vez, e o voto vale normalmente.
 - **Ordem de chegada:** a lista guarda as indicações na ordem em que chegaram, então quem

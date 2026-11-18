@@ -11,7 +11,6 @@ import { checkDraft, EMPTY_DRAFT, type Draft, type DraftErrors } from './draft';
 import styles from './NominationForm.module.css';
 import { ReviewNomination } from './ReviewNomination';
 import { useSendAnswer } from './use-send-answer';
-import { useTitleCheck } from './use-title-check';
 
 type Stage = 'choose' | 'details' | 'review';
 
@@ -37,32 +36,24 @@ function ChooseAnswer({ onNominate, onPass }: { onNominate: () => void; onPass: 
 
 interface DetailsFormProps {
   draft: Draft;
-  /** The message to show when the title was already nominated, or null. */
-  checkTitle: (title: string) => Promise<string | null>;
   onChange: (draft: Draft) => void;
   onBack: () => void;
   onNext: () => void;
 }
 
-function DetailsForm({ draft, checkTitle, onChange, onBack, onNext }: DetailsFormProps) {
+function DetailsForm({ draft, onChange, onBack, onNext }: DetailsFormProps) {
   const [errors, setErrors] = useState<DraftErrors>(NO_ERRORS);
-  const [checking, setChecking] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     titleRef.current?.focus();
   }, []);
 
-  /** Typos first, then whether someone already nominated this title. */
-  const submit = async () => {
+  /** Only typos stop the member: a reading nominated twice is sorted out after the call. */
+  const submit = () => {
     const found = checkDraft(draft);
     setErrors(found);
-    if (found.title || found.link) return;
-    setChecking(true);
-    const taken = await checkTitle(draft.title);
-    setChecking(false);
-    if (taken) setErrors({ ...found, title: taken });
-    else onNext();
+    if (!found.title && !found.link) onNext();
   };
 
   return (
@@ -71,7 +62,7 @@ function DetailsForm({ draft, checkTitle, onChange, onBack, onNext }: DetailsFor
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
-        void submit();
+        submit();
       }}
     >
       <TextField
@@ -100,9 +91,7 @@ function DetailsForm({ draft, checkTitle, onChange, onBack, onNext }: DetailsFor
         }}
       />
       <div className={styles.actions}>
-        <Button type="submit" busy={checking}>
-          Continuar
-        </Button>
+        <Button type="submit">Continuar</Button>
         <Button variant="quiet" onClick={onBack}>
           Voltar
         </Button>
@@ -154,7 +143,6 @@ export function NominationForm({ cycleId, uid }: NominationFormProps) {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [pending, setPending] = useState<NominationAnswer | null>(null);
   const sending = useSendAnswer(cycleId, uid);
-  const checkTitle = useTitleCheck(cycleId);
 
   const ask = (answer: NominationAnswer) => {
     sending.clearError();
@@ -176,7 +164,6 @@ export function NominationForm({ cycleId, uid }: NominationFormProps) {
       {stage === 'details' && (
         <DetailsForm
           draft={draft}
-          checkTitle={checkTitle}
           onChange={setDraft}
           onBack={() => {
             setStage('choose');

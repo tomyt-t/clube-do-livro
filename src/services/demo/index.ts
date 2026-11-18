@@ -1,6 +1,6 @@
 import type { Backend } from '../backend';
 
-import { sameTitleChecker } from '../duplicates/same-title';
+import { exactChecker } from '../duplicates/same-title';
 
 import { createDemoAdmin } from './admin';
 import { createDemoAuth, type DemoAuthPort } from './auth';
@@ -40,7 +40,7 @@ export function createDemoBackend(options: DemoOptions = {}): DemoBackend {
     club: createDemoClub(context),
     flow: createDemoFlow(context),
     admin: createDemoAdmin(context),
-    checker: sameTitleChecker,
+    checker: exactChecker,
     personas: DEMO_PERSONAS,
     loadScenario: (scenario) => {
       context.store.update((draft) => {

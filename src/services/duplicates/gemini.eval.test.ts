@@ -24,23 +24,33 @@ const MODEL = process.env.GEMINI_MODEL ?? 'gemini-3.5-flash-lite';
 
 interface Case {
   titles: string[];
-  /** Expected groups, as 1-based positions in `titles`. */
-  groups: number[][];
+  /** Groups the model must be sure of (merged on their own), as 1-based positions. */
+  same?: number[][];
+  /** Groups it must find, sure or not. */
+  grouped?: number[][];
+  /** Different works: never grouped at all. */
+  apart?: true;
+  /** Never merged on their own (a doubt for the organizer is fine). */
+  notSame?: true;
 }
 
 const CASES: Case[] = [
-  { titles: ['Dom Casmurro', 'Dom Casmurro, Machado de Assis', 'Torto Arado'], groups: [[1, 2]] },
-  { titles: ['Harry Potter e a Pedra Filosofal', 'Harry Potter e a Câmara Secreta'], groups: [] },
-  { titles: ['O Pequeno Príncipe', 'The Little Prince, Saint-Exupéry'], groups: [[1, 2]] },
-  { titles: ['1984, George Orwell', 'A Revolução dos Bichos, George Orwell'], groups: [] },
-  { titles: ['Berserk vol. 1', 'Berserk volume 2'], groups: [] },
+  { titles: ['Os Miseráveis', 'Les Misérables, Victor Hugo'], same: [[1, 2]] },
+  { titles: ['Harry Potter e a Pedra Filosofal', 'Harry Potter e o Cálice de Fogo'], apart: true },
+  { titles: ['Mercenários 1', 'Mercenários 2'], apart: true },
+  { titles: ['Harry Potter', 'Harry Potter e a Pedra Filosofal, J. K. Rowling'], notSame: true },
+  { titles: ['O Pequeno Príncipe', 'The Little Prince, Saint-Exupéry'], same: [[1, 2]] },
+  { titles: ['Dom Casmurro', 'Dom Casmurro, Machado de Assis', 'Torto Arado'], grouped: [[1, 2]] },
+  { titles: ['1984, George Orwell', 'A Revolução dos Bichos, George Orwell'], apart: true },
+  { titles: ['Berserk vol. 1', 'Berserk volume 2'], apart: true },
+  { titles: ['Fundação, Isaac Asimov', 'Fundação e Império, Isaac Asimov'], apart: true },
   {
     titles: [
       'Cem anos de solidão',
       'Cem Anos de Solidao - Gabriel Garcia Marquez',
       'O Amor nos Tempos do Cólera',
     ],
-    groups: [[1, 2]],
+    grouped: [[1, 2]],
   },
   {
     titles: [
@@ -48,20 +58,19 @@ const CASES: Case[] = [
       'Vidas Secas',
       'Quarto de Despejo',
     ],
-    groups: [],
+    apart: true,
   },
   {
     titles: ['Memórias Póstumas de Brás Cubas', 'memorias postumas de bras cubas machado'],
-    groups: [[1, 2]],
+    grouped: [[1, 2]],
   },
-  { titles: ['Fundação, Isaac Asimov', 'Fundação e Império, Isaac Asimov'], groups: [] },
   {
     titles: [
       'Grande Sertão: Veredas',
       'Grande Sertao Veredas, Guimarães Rosa',
       'Sagarana, Guimarães Rosa',
     ],
-    groups: [[1, 2]],
+    grouped: [[1, 2]],
   },
 ];
 
@@ -106,14 +115,19 @@ const asSorted = (groups: string[][]) => groups.map((g) => [...g].sort().join('+
 describe.skipIf(!KEY)(`duplicate check with ${MODEL}`, () => {
   it.each(CASES)(
     '$titles',
-    async ({ titles, groups }) => {
+    async ({ titles, same, grouped, apart, notSame }) => {
       const nominations: Nomination[] = titles.map((title, index) => ({
         id: `n${String(index + 1)}`,
         book: makeBook({ title }),
       }));
       const found = parseDuplicateGroups(await ask(titles), nominations);
-      const expected = groups.map((group) => group.map((n) => `n${String(n)}`));
-      expect(asSorted(found.map((group) => group.ids))).toEqual(asSorted(expected));
+      const ids = (groups: number[][]) => groups.map((group) => group.map((n) => `n${String(n)}`));
+      const sameIds = asSorted(found.same.map((group) => group.ids));
+      const allIds = asSorted([...found.same, ...found.unsure].map((group) => group.ids));
+      if (same) expect(sameIds).toEqual(asSorted(ids(same)));
+      if (grouped) expect(allIds).toEqual(asSorted(ids(grouped)));
+      if (apart) expect(allIds).toEqual([]);
+      if (notSame) expect(sameIds).toEqual([]);
     },
     60_000,
   );

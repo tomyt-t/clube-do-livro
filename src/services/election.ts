@@ -6,7 +6,13 @@ import {
   statusAfterDecision,
 } from '@/domain/cycle';
 import type { FlowStep } from '@/domain/flow';
-import { ballotOptions, openingResults, type ConflictGroup } from '@/domain/review';
+import {
+  ballotOptions,
+  openingResults,
+  settleFindings,
+  type ConflictGroup,
+  type DuplicateFindings,
+} from '@/domain/review';
 import { decide, type Decision } from '@/domain/tally';
 import type { Cycle, CycleId, Nomination } from '@/domain/types';
 
@@ -103,18 +109,20 @@ export async function declareResult(
 /**
  * Runs the duplicate check on what would be on the ballot: the round's list,
  * minus readings merged away. A group made only of readings flagged earlier
- * this round was already sorted out (kept apart), so it is not raised again.
+ * this round was already sorted out by the organizer, so it is not raised
+ * again.
  */
 async function checkNominations(
   checker: DuplicateChecker,
   cycle: Cycle,
   nominations: readonly Nomination[],
-): Promise<ConflictGroup[]> {
+): Promise<DuplicateFindings> {
   const listed = nominations.filter(
     ({ id }) => cycle.nominationIds.includes(id) && !(id in cycle.merged),
   );
-  const groups = await checker.findDuplicates(listed);
-  return groups.filter(({ ids }) => !ids.every((id) => cycle.flagged.includes(id)));
+  const found = await checker.findDuplicates(listed);
+  const fresh = ({ ids }: ConflictGroup) => !ids.every((id) => cycle.flagged.includes(id));
+  return { same: found.same.filter(fresh), unsure: found.unsure.filter(fresh) };
 }
 
 export async function takeFlowStep(
@@ -128,8 +136,10 @@ export async function takeFlowStep(
       await flow.startReview(cycle.id);
       return;
     case 'check': {
-      const groups = await checkNominations(context.checker, cycle, context.nominations);
-      await flow.recordReview(cycle.id, groups);
+      // The same work is merged into its first nomination; doubts go to the organizer.
+      const found = await checkNominations(context.checker, cycle, context.nominations);
+      const { merged, flags } = settleFindings(found, cycle);
+      await flow.recordReview(cycle.id, flags, merged);
       return;
     }
     case 'open-voting':

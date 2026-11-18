@@ -7,7 +7,7 @@ import {
   canLetGo,
   conflictIds,
   mergeGroup,
-  nominatorsOf,
+  headStart,
   withoutGroup,
   type ConflictGroup,
 } from '@/domain/review';
@@ -15,7 +15,7 @@ import type { Cycle, MemberId, NominationId } from '@/domain/types';
 import { useCycles, useMemberProfiles, useNominations } from '@/features/club/use-club';
 import { Button } from '@/ui/Button';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
-import { joinNames } from '@/ui/format';
+import { countOf, joinNames } from '@/ui/format';
 import { Notice } from '@/ui/Notice';
 
 import styles from './AdminPage.module.css';
@@ -126,7 +126,7 @@ function Conflicts({ cycle, groups }: { cycle: Cycle; groups: readonly ConflictG
     const kept = Object.values(merged).find((id) => group.ids.includes(id)) ?? '';
     setPending({
       title: 'Juntar numa só leitura?',
-      body: `${joinNames(group.ids.map((id) => `“${names.titleOf(id)}”`))} viram uma opção só na cédula. Ela já começa com ${String(nominatorsOf(kept, merged))} votos de 1ª opção, um de cada pessoa que indicou, e essas pessoas votam só na 2ª opção.`,
+      body: `${joinNames(group.ids.map((id) => `“${names.titleOf(id)}”`))} viram uma opção só na cédula. Fica a indicação de quem indicou primeiro, que vota normalmente; ela começa com ${countOf(headStart(kept, merged), 'voto', 'votos')} de 1ª opção, um de cada pessoa que indicou depois, e essas pessoas votam só na 2ª opção.`,
       label: 'Juntar',
       run: () =>
         admin.updateReview({ cycleId: cycle.id, groups: withoutGroup(groups, index), merged }),

@@ -80,7 +80,6 @@ export async function answerNominationCall(
     const key = titleKey(answer.book.title);
     nominationId = nomination.id;
     batch.set(nomination, { book: toBookData(answer.book), titleKey: key });
-    batch.set(refs.title(db, cycleId, key), {});
   }
   batch.set(refs.answer(db, cycleId, uid), { nominationId });
   batch.update(refs.cycle(db, cycleId), {

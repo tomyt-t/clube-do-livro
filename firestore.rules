@@ -258,16 +258,11 @@ service cloud.firestore {
       }
 
       // ----------------------------------------------------------- titles
-      // One per nominated title, by the key the app derives from it (case,
-      // accents and punctuation removed), so the same reading cannot be
-      // nominated twice. Anyone may check one title, to be told it is taken;
-      // nobody may list them, which would reveal the hidden nominations.
-      // Rules cannot normalize Unicode, so they check only the key's shape:
-      // a doctored app could nominate a twin, which everyone sees later.
+      // Earlier rounds kept one record per nominated title to refuse a twin.
+      // Twins are now welcome (the check after the call merges them), so
+      // records are no longer made; old ones only go with a let-go reading.
 
       match /titles/{key} {
-        allow get: if isMember();
-        allow create: if isMember() && isNewTitle(cycleId, key);
         allow delete: if isAdmin() && isReopening(cycleId) && isLetGoTitle(cycleId, key);
       }
 
@@ -375,7 +370,6 @@ service cloud.firestore {
         && hasExactly(request.resource.data, ['book', 'titleKey'])
         && isBook(request.resource.data.book)
         && isTitleKey(key)
-        && !exists(titlePath(c, key)) && existsAfter(titlePath(c, key))
         && isAnsweringNow(c)
         && getAfter(answerPath(c)).data.nominationId == n;
     }
@@ -384,14 +378,6 @@ service cloud.firestore {
     function isTitleKey(key) {
       return key is string && key.size() >= 1 && key.size() <= 200
         && key.matches('[^ /]+( [^ /]+)*');
-    }
-
-    // Created with the nomination that carries this key, in the same batch.
-    function isNewTitle(c, key) {
-      return request.resource.data.keys().size() == 0
-        && isAnsweringNow(c)
-        && getAfter(nominationPath(c, getAfter(answerPath(c)).data.nominationId))
-          .data.titleKey == key;
     }
 
     // Revealed once everyone answered and the review began, or past nominations.
@@ -465,15 +451,16 @@ service cloud.firestore {
 
     // The tally keeps exactly the ballot's options (it is created with them
     // and never gains or loses a key), so the changed keys are options.
-    // A member whose nomination was merged: it already counts as their first
-    // choice, on the ballot option it became.
+    // A member whose nomination came after an equal one and was merged into
+    // it: it already counts as their first choice, on that option. Whoever
+    // nominated it first votes as usual (never for it).
     function isValidVote(c) {
       let cycle = get(cyclePath(c)).data;
       let votes = request.resource.data.votes.diff(resource.data.votes);
       let firsts = request.resource.data.firsts.diff(resource.data.firsts);
       let own = ownNomination(c);
       let mine = cycle.merged.get(own, own);
-      let grouped = own in cycle.merged || cycle.merged.values().hasAny([own]);
+      let grouped = own in cycle.merged;
       return cycle.status == 'voting'
         && hasExactly(request.resource.data, ['votes', 'firsts'])
         && votes.addedKeys().size() == 0 && votes.removedKeys().size() == 0
@@ -617,9 +604,9 @@ service cloud.firestore {
     }
 
     // Merge i: the reading it was merged into starts with one vote per
-    // member who nominated it (its own nominator and every merged one).
+    // member who nominated it after its first nominator.
     function startsAheadAt(v, targets, i) {
-      return i >= targets.size() || v[targets[i]] == 1 + countIn(targets, targets[i]);
+      return i >= targets.size() || v[targets[i]] == countIn(targets, targets[i]);
     }
 
     // Every option at zero except merged readings, at their head start.
@@ -692,19 +679,50 @@ service cloud.firestore {
     }
 
     // What the check found, recorded once, by whichever member's device ran
-    // it first. Flags let the organizer see who nominated those readings, so
-    // they are capped: every reading flagged in the round is kept in
-    // `flagged`, no more than one pair or half the list over the whole round,
-    // and a check that flags much (or again and again) is not believed.
-    // Readings already merged are not checked again.
+    // it first: the same work merged on its own, and the doubts flagged for
+    // the organizer. Flags let the organizer see who nominated those
+    // readings, so they are capped: every reading flagged in the round is
+    // kept in `flagged`, no more than one pair or half the list over the
+    // whole round, and a check that flags much is not believed. Readings
+    // already merged are not checked again.
     function recordsReview(before, after) {
       return before.status == 'nominating' && before.review != null
         && before.review.ids == null
-        && changesOnly(['review', 'flagged'])
+        && changesOnly(['review', 'flagged', 'merged'])
         && isReviewData(after.review, before.nominationIds)
         && !after.review.ids.hasAny(before.merged.keys())
         && after.flagged == before.flagged.concat(after.review.ids.removeAll(before.flagged))
-        && (after.flagged.size() <= 2 || after.flagged.size() * 2 <= before.nominationIds.size());
+        && (after.flagged.size() <= 2 || after.flagged.size() * 2 <= before.nominationIds.size())
+        && (after.merged == before.merged || autoMerges(before, after));
+    }
+
+    // Merge i, if new: a later nomination into an earlier one (arrival
+    // order, so the first nominator's reading is the one that stays).
+    function mergesIntoEarlier(ids, m, old, ks, i) {
+      return i >= ks.size() || ks[i] in old
+        || ids.removeAll(ids.removeAll([m[ks[i]], ks[i]])) == [m[ks[i]], ks[i]];
+    }
+
+    // The check's own merges: only added, at most four, never a reading it
+    // also flagged, each one into an earlier nomination. Rules cannot tell
+    // whether two titles are the same work; this is what they can hold.
+    function autoMerges(before, after) {
+      let m = after.merged;
+      let added = m.diff(before.merged);
+      let ks = m.keys();
+      let ids = before.nominationIds;
+      return isMerge(m, ids)
+        && added.changedKeys().size() == 0 && added.removedKeys().size() == 0
+        && added.addedKeys().size() <= 4
+        && !after.review.ids.hasAny(ks) && !after.review.ids.hasAny(m.values())
+        && mergesIntoEarlier(ids, m, before.merged, ks, 0)
+        && mergesIntoEarlier(ids, m, before.merged, ks, 1)
+        && mergesIntoEarlier(ids, m, before.merged, ks, 2)
+        && mergesIntoEarlier(ids, m, before.merged, ks, 3)
+        && mergesIntoEarlier(ids, m, before.merged, ks, 4)
+        && mergesIntoEarlier(ids, m, before.merged, ks, 5)
+        && mergesIntoEarlier(ids, m, before.merged, ks, 6)
+        && mergesIntoEarlier(ids, m, before.merged, ks, 7);
     }
 
     function isClearReview(cycle) {

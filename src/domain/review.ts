@@ -2,9 +2,10 @@ import type { Cycle, NominationId, OwnAnswer, VoteResults } from './types';
 
 /**
  * The check between nominations and the vote. Nominations stay hidden while
- * they come in; once everyone answered, the list opens and is checked for
- * readings nominated twice under different titles. The checker only flags:
- * the organizer decides, after talking to whoever nominated them.
+ * they come in (nobody is stopped from nominating a reading twice); once
+ * everyone answered, the list opens and is checked for the same work
+ * nominated more than once. The same work beyond doubt is merged on its own
+ * into its first nomination; anything uncertain waits for the organizer.
  */
 
 /** Readings the checker thinks are the same work, and why. */
@@ -19,12 +20,23 @@ export interface CycleReview {
 }
 
 /**
- * Nominations the organizer merged into an equal one: removed id → kept id.
- * The kept one goes on the ballot with a head start of one first-choice vote
- * per member who nominated the reading, and those members then pick only a
- * second choice.
+ * Nominations of the same work merged into its first one: later id → first
+ * id. The first nomination goes on the ballot as usual, and its nominator
+ * votes like everyone else. Each later nomination is annulled: it counts as
+ * that member's first-choice vote for the reading (a head start), and they
+ * then pick only a second choice.
  */
 export type Merged = Readonly<Record<NominationId, NominationId>>;
+
+/** What a duplicate check found. */
+export interface DuplicateFindings {
+  /** The same work beyond doubt (same book, same author): merged on their own. */
+  same: ConflictGroup[];
+  /** Maybe the same work: the organizer decides. */
+  unsure: ConflictGroup[];
+}
+
+export const NO_FINDINGS: DuplicateFindings = { same: [], unsure: [] };
 
 /**
  * Limits on what a check may flag, checked by the rules too. Flags let the
@@ -35,6 +47,8 @@ export const MAX_CONFLICT_GROUPS = 3;
 export const MAX_GROUP_SIZE = 3;
 /** The most merges a round may hold (the rules check them one by one). */
 export const MAX_MERGED = 8;
+/** The most merges one check may make on its own (the rest wait for the organizer). */
+export const MAX_AUTO_MERGES = 4;
 
 export function conflictIds(groups: readonly ConflictGroup[]): NominationId[] {
   return [...new Set(groups.flatMap((group) => group.ids))];
@@ -53,17 +67,14 @@ export function ballotOptions(
   return nominationIds.filter((id) => !(id in merged));
 }
 
-/** Members whose nomination ended up as `kept`: its own nominator and every merged one. */
-export function nominatorsOf(kept: NominationId, merged: Merged): number {
-  return 1 + Object.values(merged).filter((target) => target === kept).length;
+/** First-choice votes a reading starts with: one per later nomination merged into it. */
+export function headStart(kept: NominationId, merged: Merged): number {
+  return Object.values(merged).filter((target) => target === kept).length;
 }
 
 /** The tally the vote opens with: zero, plus the head start of merged readings. */
 export function openingResults(options: readonly NominationId[], merged: Merged): VoteResults {
-  const targets = new Set(Object.values(merged));
-  const start = Object.fromEntries(
-    options.map((option) => [option, targets.has(option) ? nominatorsOf(option, merged) : 0]),
-  );
+  const start = Object.fromEntries(options.map((option) => [option, headStart(option, merged)]));
   return { votes: { ...start }, firsts: { ...start } };
 }
 
@@ -71,7 +82,10 @@ export function openingResults(options: readonly NominationId[], merged: Merged)
 export interface BallotSeat {
   /** The option holding their nomination, which they cannot vote for; null if they passed. */
   own: NominationId | null;
-  /** Their nomination was merged with an equal one, so it already counts as their first choice. */
+  /**
+   * Their nomination came after an equal one and was annulled: it already
+   * counts as their first choice. The first nominator votes as usual.
+   */
   merged: boolean;
 }
 
@@ -79,7 +93,62 @@ export function ballotSeat(ownNomination: NominationId | null, merged: Merged): 
   if (ownNomination === null) return { own: null, merged: false };
   const kept = merged[ownNomination];
   if (kept !== undefined) return { own: kept, merged: true };
-  return { own: ownNomination, merged: Object.values(merged).includes(ownNomination) };
+  return { own: ownNomination, merged: false };
+}
+
+/**
+ * A merge the check makes on its own: every later nomination into the first
+ * one, in arrival order. Null when that would move an earlier merge (a later
+ * nomination already took others in), which the organizer then decides.
+ */
+export function autoMerge(
+  merged: Merged,
+  group: readonly NominationId[],
+  nominationIds: readonly NominationId[],
+): Record<NominationId, NominationId> | null {
+  const [kept, ...later] = nominationIds.filter((id) => group.includes(id) && !(id in merged));
+  if (kept === undefined || later.length === 0) return null;
+  if (later.some((id) => Object.values(merged).includes(id))) return null;
+  return { ...merged, ...Object.fromEntries(later.map((id) => [id, kept])) };
+}
+
+/**
+ * Whether flags fit what the rules accept: up to three groups of two or
+ * three readings, apart, and over the whole round no more than one pair or
+ * half the list (flags show the organizer who nominated them).
+ */
+export function fitsFlagLimits(
+  groups: readonly ConflictGroup[],
+  cycle: Pick<Cycle, 'flagged' | 'nominationIds'>,
+): boolean {
+  const ids = conflictIds(groups);
+  const total = groups.reduce((sum, group) => sum + group.ids.length, 0);
+  const sized = groups.every(({ ids: g }) => g.length >= 2 && g.length <= MAX_GROUP_SIZE);
+  const round = new Set([...cycle.flagged, ...ids]).size;
+  const capped = round <= 2 || round * 2 <= cycle.nominationIds.length;
+  return groups.length <= MAX_CONFLICT_GROUPS && sized && total === ids.length && capped;
+}
+
+/**
+ * What a check records: the same work merged on its own, up to
+ * `MAX_AUTO_MERGES` (the rest, and anything a merge cannot settle, goes to
+ * the organizer), and the uncertain groups flagged, if they fit the limits.
+ */
+export function settleFindings(
+  findings: DuplicateFindings,
+  cycle: Pick<Cycle, 'flagged' | 'nominationIds' | 'merged'>,
+): { merged: Merged; flags: ConflictGroup[] } {
+  let next: Merged = { ...cycle.merged };
+  const flags = [...findings.unsure];
+  for (const group of findings.same) {
+    const merge = autoMerge(next, group.ids, cycle.nominationIds);
+    const added = merge ? Object.keys(merge).length - Object.keys(cycle.merged).length : 0;
+    const fits =
+      merge !== null && added <= MAX_AUTO_MERGES && Object.keys(merge).length <= MAX_MERGED;
+    if (fits) next = merge;
+    else flags.push(group);
+  }
+  return { merged: next, flags: fitsFlagLimits(flags, cycle) ? flags : [] };
 }
 
 /**

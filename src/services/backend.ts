@@ -1,4 +1,4 @@
-import type { ConflictGroup, Merged } from '@/domain/review';
+import type { ConflictGroup, DuplicateFindings, Merged } from '@/domain/review';
 import type {
   Book,
   ClubSettings,
@@ -103,7 +103,6 @@ export interface ClubPort {
     subscriber: Subscriber<Nomination | null>,
   ): Unsubscribe;
   /** Whether a reading with this title (see `titleKey`) was already nominated. */
-  isTitleTaken(cycleId: CycleId, title: string): Promise<boolean>;
   watchOwnAnswer(
     cycleId: CycleId,
     uid: MemberId,
@@ -155,7 +154,8 @@ export interface FlowPort {
   /** Everyone answered: the list opens and no more nominations come in. */
   startReview(cycleId: CycleId): Promise<void>;
   /** Records what the duplicate check found (maybe nothing); once per check. */
-  recordReview(cycleId: CycleId, groups: readonly ConflictGroup[]): Promise<void>;
+  /** What the check found: groups left to the organizer, and the merges it made on its own. */
+  recordReview(cycleId: CycleId, groups: readonly ConflictGroup[], merged: Merged): Promise<void>;
   /** Fixes the ballot's options and opens the tally. */
   startVoting(input: StartVotingInput): Promise<void>;
   closeVoting(cycleId: CycleId): Promise<void>;
@@ -171,7 +171,7 @@ export interface FlowPort {
  * organizer decides. Runs in the browser of whoever takes the step.
  */
 export interface DuplicateChecker {
-  findDuplicates(nominations: readonly Nomination[]): Promise<ConflictGroup[]>;
+  findDuplicates(nominations: readonly Nomination[]): Promise<DuplicateFindings>;
 }
 
 // ------------------------------------------------------------------ admin

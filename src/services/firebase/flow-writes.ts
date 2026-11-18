@@ -8,7 +8,7 @@ import {
 } from 'firebase/firestore';
 
 import { cycleIdFor } from '@/domain/flow';
-import { conflictIds, type ConflictGroup } from '@/domain/review';
+import { conflictIds, type ConflictGroup, type Merged } from '@/domain/review';
 import type { Book, CycleId, DecisionMethod, NominationId, VoteResults } from '@/domain/types';
 
 import { toResults } from './converters';
@@ -41,15 +41,20 @@ export async function startReview(db: Firestore, cycleId: CycleId) {
   await updateDoc(refs.cycle(db, cycleId), { review: reviewData(null) });
 }
 
-/** What the check found, recorded once; flagged readings also join the round's tally of flags. */
+/**
+ * What the check found, recorded once: the groups left to the organizer
+ * (they also join the round's tally of flags) and the merges it made.
+ */
 export async function recordReview(
   db: Firestore,
   cycleId: CycleId,
   groups: readonly ConflictGroup[],
+  merged: Merged,
 ) {
   const ids = conflictIds(groups);
   await updateDoc(refs.cycle(db, cycleId), {
     review: reviewData(groups),
+    merged: { ...merged },
     ...(ids.length > 0 ? { flagged: arrayUnion(...ids) } : {}),
   });
 }
