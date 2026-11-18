@@ -5,12 +5,11 @@ import { answerAs, electionContext, emptyClub, firstValue, voteAs } from '@/test
 
 import type { DemoBackend } from './demo';
 import {
-  drawTiebreak,
   ElectionError,
   finishCurrentReading,
   openNominations,
   startVoting,
-  tallyCurrentRound,
+  tallyVotes,
 } from './election';
 
 async function cyclesOf(backend: DemoBackend) {
@@ -63,79 +62,74 @@ describe('startVoting', () => {
       null,
     );
 
-    expect(resolution).toEqual({ kind: 'winner', nominationId: only, method: 'unopposed' });
+    expect(resolution).toEqual({ nominationId: only, method: 'unopposed', drawnFrom: [] });
     expect((await cycleOf(backend, cycleId))?.status).toBe('reading');
   });
 });
 
-describe('tallyCurrentRound', () => {
-  it('declares the book with the most votes', async () => {
+describe('tallyVotes', () => {
+  async function votingCycle() {
     const backend = emptyClub();
-    const { cycleId, rafa, julia, teo } = await nominatedCycle(backend);
-    await startVoting(backend.admin, await electionContext(backend, cycleId), null);
+    const ids = await nominatedCycle(backend);
+    await startVoting(backend.admin, await electionContext(backend, ids.cycleId), null);
+    const vote = (uid: string, choices: string[]) =>
+      voteAs(backend, { cycleId: ids.cycleId, uid, choices });
+    const tally = async (random?: () => number) =>
+      tallyVotes(backend.admin, await electionContext(backend, ids.cycleId), random);
+    return { backend, ...ids, vote, tally };
+  }
 
-    await voteAs(backend, { cycleId, round: 1, uid: 'lia', choices: [rafa, julia] });
-    await voteAs(backend, { cycleId, round: 1, uid: 'teo', choices: [rafa, julia] });
-    await voteAs(backend, { cycleId, round: 1, uid: 'julia', choices: [rafa, teo] });
+  it('declares the most votes, even with fewer first choices', async () => {
+    const { backend, cycleId, rafa, julia, teo, vote, tally } = await votingCycle();
+    await vote('lia', [julia, rafa]);
+    await vote('bruno', [julia, rafa]);
+    await vote('teo', [julia, rafa]);
+    await vote('julia', [teo, rafa]);
 
-    const resolution = await tallyCurrentRound(
-      backend.admin,
-      await electionContext(backend, cycleId),
-    );
-
-    expect(resolution).toEqual({ kind: 'winner', nominationId: rafa, method: 'votes' });
+    expect(await tally()).toEqual({ nominationId: rafa, method: 'votes', drawnFrom: [] });
     const cycle = await cycleOf(backend, cycleId);
     expect(cycle?.status).toBe('reading');
     expect(cycle?.winner?.book.title).toBe('Livro de rafa');
+    expect(cycle?.results?.votes).toEqual({ [rafa]: 4, [julia]: 3, [teo]: 1 });
   });
 
-  it('sends a tie to a runoff, then to a draw', async () => {
-    const backend = emptyClub();
-    const { cycleId, rafa, julia } = await nominatedCycle(backend);
-    await startVoting(backend.admin, await electionContext(backend, cycleId), null);
-    await voteAs(backend, { cycleId, round: 1, uid: 'lia', choices: [rafa, julia] });
+  it('breaks a tie by first choices', async () => {
+    const { rafa, julia, vote, tally } = await votingCycle();
+    await vote('lia', [rafa, julia]);
+    await vote('bruno', [julia, rafa]);
+    await vote('teo', [rafa, julia]);
 
-    const first = await tallyCurrentRound(backend.admin, await electionContext(backend, cycleId));
-    expect(first).toEqual({ kind: 'runoff', options: [rafa, julia] });
+    expect(await tally()).toEqual({ nominationId: rafa, method: 'first-choices', drawnFrom: [] });
+  });
 
-    await voteAs(backend, { cycleId, round: 2, uid: 'rafa', choices: [rafa] });
-    await voteAs(backend, { cycleId, round: 2, uid: 'julia', choices: [julia] });
-    const second = await tallyCurrentRound(backend.admin, await electionContext(backend, cycleId));
-    expect(second).toEqual({ kind: 'tiebreak', candidates: [rafa, julia] });
+  it('draws among the books still tied', async () => {
+    const { backend, cycleId, rafa, julia, vote, tally } = await votingCycle();
+    await vote('lia', [rafa, julia]);
+    await vote('bruno', [julia, rafa]);
 
-    const winner = await drawTiebreak(
-      backend.admin,
-      await electionContext(backend, cycleId),
-      () => 0.99,
-    );
-    expect(winner).toBe(julia);
+    expect(await tally(() => 0.99)).toEqual({
+      nominationId: julia,
+      method: 'draw',
+      drawnFrom: [rafa, julia],
+    });
     expect((await cycleOf(backend, cycleId))?.winner?.method).toBe('draw');
   });
 
   it('picks up where a previous attempt stopped', async () => {
-    const backend = emptyClub();
-    const { cycleId, rafa, julia } = await nominatedCycle(backend);
-    await startVoting(backend.admin, await electionContext(backend, cycleId), null);
-    await voteAs(backend, { cycleId, round: 1, uid: 'lia', choices: [rafa, julia] });
-    await voteAs(backend, { cycleId, round: 1, uid: 'teo', choices: [rafa, julia] });
-    // A previous attempt closed the round, then failed before recording results.
-    await backend.admin.closeRound(cycleId, 1);
+    const { backend, cycleId, rafa, julia, vote, tally } = await votingCycle();
+    await vote('lia', [rafa, julia]);
+    // A previous attempt closed voting, then failed before declaring.
+    await backend.admin.closeVoting(cycleId);
 
-    const resolution = await tallyCurrentRound(
-      backend.admin,
-      await electionContext(backend, cycleId),
-    );
-    expect(resolution.kind).toBe('runoff');
+    expect((await tally()).nominationId).toBe(rafa);
   });
-});
 
-describe('drawTiebreak', () => {
-  it('only runs during a tiebreak', async () => {
+  it('only counts a cycle that is voting', async () => {
     const backend = emptyClub();
     const { cycleId } = await nominatedCycle(backend);
     await expect(
-      drawTiebreak(backend.admin, await electionContext(backend, cycleId)),
-    ).rejects.toMatchObject({ code: 'not-a-tiebreak' });
+      tallyVotes(backend.admin, await electionContext(backend, cycleId)),
+    ).rejects.toMatchObject({ code: 'not-voting' });
   });
 });
 

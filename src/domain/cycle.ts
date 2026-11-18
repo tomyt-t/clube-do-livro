@@ -1,6 +1,6 @@
 import type { Cycle, CycleStatus } from './types';
 
-const ELECTION_STATUSES: readonly CycleStatus[] = ['nominating', 'voting', 'tiebreak'];
+const ELECTION_STATUSES: readonly CycleStatus[] = ['nominating', 'voting', 'tallying'];
 
 function latest(cycles: readonly Cycle[], statuses: readonly CycleStatus[]): Cycle | null {
   return cycles
@@ -42,7 +42,7 @@ export type ElectionStep = 'nominations' | 'voting' | 'result';
 
 export function electionStep(status: CycleStatus): ElectionStep {
   if (status === 'nominating') return 'nominations';
-  if (status === 'voting') return 'voting';
+  if (status === 'voting' || status === 'tallying') return 'voting';
   return 'result';
 }
 

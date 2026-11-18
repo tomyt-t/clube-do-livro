@@ -1,7 +1,7 @@
-import type { Cycle, Nomination, Round, Tally } from '@/domain/types';
+import type { Cycle, DecisionMethod, Nomination, VoteResults } from '@/domain/types';
 
 import { DEMO_BOOKS } from './books';
-import { roundKey, type DemoPersona, type DemoState } from './state';
+import type { DemoPersona, DemoState } from './state';
 
 export const DEMO_PERSONAS: readonly DemoPersona[] = [
   { uid: 'marina', name: 'Marina', email: 'marina@example.com', note: 'organiza' },
@@ -29,29 +29,23 @@ function nominations(keys: BookKey[]): Nomination[] {
   return keys.map((key) => ({ id: key, book: DEMO_BOOKS[key] }));
 }
 
-function closedRound(number: number, results: Tally, at: Date): Round {
-  const options = Object.keys(results);
-  return {
-    number,
-    kind: number === 1 ? 'first' : 'runoff',
-    options,
-    votesPerMember: number === 1 ? 2 : 1,
-    status: 'closed',
-    ballots: 6,
-    openedAt: at,
-    closedAt: at,
-    results,
-  };
-}
-
 interface PastCycle {
   id: string;
   number: number;
   winner: BookKey;
-  method: 'votes' | 'draw';
-  rounds: Tally[];
+  method: DecisionMethod;
+  /** Six members, two votes each: [votes, first choices] per book. */
+  results: Partial<Record<BookKey, [number, number]>>;
   startedDaysAgo: number;
   finishedDaysAgo: number | null;
+}
+
+function resultsOf(past: PastCycle): VoteResults {
+  const entries = Object.entries(past.results);
+  return {
+    votes: Object.fromEntries(entries.map(([key, [votes]]) => [key, votes])),
+    firsts: Object.fromEntries(entries.map(([key, [, firsts]]) => [key, firsts])),
+  };
 }
 
 function pastCycle(now: Date, past: PastCycle): Cycle {
@@ -60,11 +54,15 @@ function pastCycle(now: Date, past: PastCycle): Cycle {
     id: past.id,
     number: past.number,
     status: past.finishedDaysAgo === null ? 'reading' : 'finished',
-    currentRound: past.rounds.length,
     responses: 6,
     nominationDeadline: null,
     votingDeadline: null,
     createdAt: daysAgo(now, past.startedDaysAgo + 7),
+    options: Object.keys(past.results),
+    ballots: 6,
+    votingOpenedAt: daysAgo(now, past.startedDaysAgo + 3),
+    votingClosedAt: decidedAt,
+    results: resultsOf(past),
     winner: {
       nominationId: past.winner,
       book: DEMO_BOOKS[past.winner],
@@ -76,13 +74,14 @@ function pastCycle(now: Date, past: PastCycle): Cycle {
   };
 }
 
+/** One cycle for each way of winning: votes, first choices and a draw. */
 const PAST_CYCLES: PastCycle[] = [
   {
     id: 'c1',
     number: 1,
     winner: 'hora',
     method: 'votes',
-    rounds: [{ hora: 5, dom: 3, vidas: 2, quarto: 2 }],
+    results: { hora: [5, 3], dom: [3, 1], vidas: [2, 1], quarto: [2, 1] },
     startedDaysAgo: 120,
     finishedDaysAgo: 90,
   },
@@ -90,11 +89,8 @@ const PAST_CYCLES: PastCycle[] = [
     id: 'c2',
     number: 2,
     winner: 'torto',
-    method: 'votes',
-    rounds: [
-      { torto: 4, ensaio: 4, bras: 2, avesso: 2 },
-      { torto: 4, ensaio: 2 },
-    ],
+    method: 'first-choices',
+    results: { torto: [4, 3], ensaio: [4, 1], bras: [2, 1], avesso: [2, 1] },
     startedDaysAgo: 85,
     finishedDaysAgo: 45,
   },
@@ -103,23 +99,17 @@ const PAST_CYCLES: PastCycle[] = [
     number: 3,
     winner: 'cem',
     method: 'draw',
-    rounds: [
-      { cem: 4, avesso: 4, quarto: 4 },
-      { cem: 3, avesso: 3, quarto: 0 },
-    ],
+    results: { cem: [4, 2], avesso: [4, 2], quarto: [4, 2] },
     startedDaysAgo: 40,
     finishedDaysAgo: null,
   },
 ];
 
 function seedPastCycle(state: DemoState, now: Date, past: PastCycle) {
-  const at = daysAgo(now, past.startedDaysAgo);
-  state.cycles[past.id] = pastCycle(now, past);
-  state.nominations[past.id] = nominations(Object.keys(past.rounds[0] ?? {}) as BookKey[]);
-  state.rounds[past.id] = past.rounds.map((results, index) => closedRound(index + 1, results, at));
-  past.rounds.forEach((results, index) => {
-    state.tallies[roundKey(past.id, index + 1)] = { ...results };
-  });
+  const cycle = pastCycle(now, past);
+  state.cycles[past.id] = cycle;
+  state.nominations[past.id] = nominations(cycle.options as BookKey[]);
+  state.tallies[past.id] = cycle.results ?? undefined;
 }
 
 /** Cycle 4 is collecting nominations; Marina has not answered yet. */
@@ -128,11 +118,15 @@ function seedOpenCycle(state: DemoState, now: Date) {
     id: 'c4',
     number: 4,
     status: 'nominating',
-    currentRound: 0,
     responses: 3,
     nominationDeadline: new Date(now.getTime() + 3 * DAY),
     votingDeadline: null,
     createdAt: daysAgo(now, 2),
+    options: [],
+    ballots: 0,
+    votingOpenedAt: null,
+    votingClosedAt: null,
+    results: null,
     winner: null,
     readingStartedAt: null,
     finishedAt: null,
@@ -153,7 +147,6 @@ export function createDemoState(now: Date = new Date()): DemoState {
     cycles: {},
     nominations: {},
     answers: {},
-    rounds: {},
     tallies: {},
     receipts: {},
   };
@@ -171,5 +164,5 @@ export function createDemoState(now: Date = new Date()): DemoState {
 /** Only the allowlist and members: for tests that build their own cycles. */
 export function createEmptyDemoState(): DemoState {
   const state = createDemoState();
-  return { ...state, cycles: {}, nominations: {}, answers: {}, rounds: {}, tallies: {} };
+  return { ...state, cycles: {}, nominations: {}, answers: {}, tallies: {} };
 }

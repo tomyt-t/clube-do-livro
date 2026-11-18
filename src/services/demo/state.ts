@@ -1,12 +1,4 @@
-import type {
-  Cycle,
-  CycleId,
-  MemberId,
-  Nomination,
-  NominationId,
-  OwnAnswer,
-  Round,
-} from '@/domain/types';
+import type { Cycle, CycleId, MemberId, Nomination, OwnAnswer, VoteResults } from '@/domain/types';
 
 import type { MemberProfile } from '../backend';
 
@@ -18,10 +10,8 @@ export interface DemoState {
   cycles: Record<CycleId, Cycle>;
   nominations: Record<CycleId, Nomination[] | undefined>;
   answers: Record<CycleId, Record<MemberId, OwnAnswer> | undefined>;
-  rounds: Record<CycleId, Round[] | undefined>;
-  /** Keyed by `roundKey(cycleId, round)`. */
-  tallies: Record<string, Record<NominationId, number> | undefined>;
-  receipts: Record<string, MemberId[] | undefined>;
+  tallies: Record<CycleId, VoteResults | undefined>;
+  receipts: Record<CycleId, MemberId[] | undefined>;
 }
 
 export interface DemoPersona {
@@ -30,10 +20,6 @@ export interface DemoPersona {
   email: string;
   /** Shown next to the name in the demo switcher, e.g. "organiza". */
   note?: string;
-}
-
-export function roundKey(cycleId: CycleId, round: number): string {
-  return `${cycleId}#${String(round)}`;
 }
 
 type Listener = () => void;

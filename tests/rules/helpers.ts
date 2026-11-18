@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc, setDoc, Timestamp, type Firestore } from 'firebase/firestore';
 
-import type { Book, NominationId } from '@/domain/types';
+import type { Book, NominationId, Tally, VoteResults } from '@/domain/types';
 import { makeBook } from '@/test/factories';
 
 export interface Persona {
@@ -66,11 +66,15 @@ export function cycleData(overrides: Record<string, unknown> = {}) {
   return {
     number: 1,
     status: 'nominating',
-    currentRound: 0,
     responses: 0,
     nominationDeadline: null,
     votingDeadline: null,
     createdAt: Timestamp.now(),
+    options: [],
+    ballots: 0,
+    votingOpenedAt: null,
+    votingClosedAt: null,
+    results: null,
     winner: null,
     readingStartedAt: null,
     finishedAt: null,
@@ -113,48 +117,40 @@ export async function seedAnswered(env: RulesTestEnvironment, cycle = {}) {
   });
 }
 
-interface RoundSeed {
-  number?: number;
-  kind?: 'first' | 'runoff';
+interface VotingSeed {
   options?: NominationId[];
-  status?: 'open' | 'closed';
-  /** Tally counts; defaults to zero for every option. */
-  counts?: Record<string, number>;
-  /** Copy the counts into `results` (as `recordResults` does). */
-  withResults?: boolean;
+  /** Every vote per book; defaults to zero for every option. */
+  votes?: Tally;
+  /** First choices per book; defaults to zero for every option. */
+  firsts?: Tally;
+  cycle?: Record<string, unknown>;
 }
 
-export async function seedRound(env: RulesTestEnvironment, seed: RoundSeed = {}) {
-  const { number = 1, kind = 'first', options = ALL_NOMINATIONS, status = 'open' } = seed;
-  const counts = seed.counts ?? Object.fromEntries(options.map((option) => [option, 0]));
-  await withoutRules(env, async (db) => {
-    await setDoc(doc(db, 'cycles', CYCLE, 'rounds', String(number)), {
-      number,
-      kind,
-      options,
-      votesPerMember: kind === 'first' ? 2 : 1,
-      status,
-      ballots: 0,
-      openedAt: Timestamp.now(),
-      closedAt: status === 'closed' ? Timestamp.now() : null,
-      results: seed.withResults ? counts : null,
-    });
-    await setDoc(doc(db, 'cycles', CYCLE, 'rounds', String(number), 'tally', 'counts'), {
-      counts,
-    });
-  });
+/** The tally a seed produces, as `readResults` returns it. */
+export function seededResults(seed: VotingSeed = {}): VoteResults {
+  const options = seed.options ?? ALL_NOMINATIONS;
+  const zeros = Object.fromEntries(options.map((option) => [option, 0]));
+  return { votes: seed.votes ?? zeros, firsts: seed.firsts ?? zeros };
 }
 
-/** Round 1 open for votes after everyone answered. */
-export async function seedVoting(
-  env: RulesTestEnvironment,
-  options: { cycle?: Record<string, unknown>; round?: RoundSeed } = {},
-) {
-  const round = options.round ?? {};
+/** Voting open after everyone answered. */
+export async function seedVoting(env: RulesTestEnvironment, seed: VotingSeed = {}) {
+  const options = seed.options ?? ALL_NOMINATIONS;
   await seedAnswered(env, {
     status: 'voting',
-    currentRound: round.number ?? 1,
-    ...options.cycle,
+    options,
+    votingOpenedAt: Timestamp.now(),
+    ...seed.cycle,
   });
-  await seedRound(env, round);
+  await withoutRules(env, (db) =>
+    setDoc(doc(db, 'cycles', CYCLE, 'tally', 'counts'), seededResults(seed)),
+  );
+}
+
+/** Voting closed; the organizer is about to declare the winner. */
+export async function seedTallying(env: RulesTestEnvironment, seed: VotingSeed = {}) {
+  await seedVoting(env, {
+    ...seed,
+    cycle: { status: 'tallying', votingClosedAt: Timestamp.now(), ...seed.cycle },
+  });
 }

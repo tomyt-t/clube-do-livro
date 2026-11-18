@@ -29,6 +29,7 @@ import {
   N_ANA,
   N_BIA,
   PAST,
+  seedTallying,
   seedVoting,
   stranger,
   type Persona,
@@ -48,25 +49,35 @@ beforeEach(async () => {
   await env.clearFirestore();
 });
 
-function vote(persona: Persona, choices: NominationId[], round = 1) {
-  return castBallot(dbAs(env, persona), { cycleId: CYCLE, round, uid: persona.uid, choices });
+function vote(persona: Persona, choices: NominationId[]) {
+  return castBallot(dbAs(env, persona), { cycleId: CYCLE, uid: persona.uid, choices });
 }
 
-const roundDoc = (db: Firestore, round = 1) => doc(db, 'cycles', CYCLE, 'rounds', String(round));
-const tallyDoc = (db: Firestore, round = 1) =>
-  doc(db, 'cycles', CYCLE, 'rounds', String(round), 'tally', 'counts');
-const receiptDoc = (db: Firestore, uid: string) =>
-  doc(db, 'cycles', CYCLE, 'rounds', '1', 'receipts', uid);
+const cycleDoc = (db: Firestore) => doc(db, 'cycles', CYCLE);
+const tallyDoc = (db: Firestore) => doc(db, 'cycles', CYCLE, 'tally', 'counts');
+const receiptDoc = (db: Firestore, uid: string) => doc(db, 'cycles', CYCLE, 'receipts', uid);
 
-describe('first round', () => {
+/** Caio's receipt and ballot count, with whatever tally change is given. */
+function forgeAsCaio(tallyChange: Record<string, unknown>) {
+  const db = dbAs(env, caio);
+  const batch = writeBatch(db);
+  batch.set(receiptDoc(db, caio.uid), {});
+  batch.update(cycleDoc(db), { ballots: increment(1) });
+  batch.update(tallyDoc(db), tallyChange);
+  return batch.commit();
+}
+
+const plusOne = (...keys: string[]) => Object.fromEntries(keys.map((key) => [key, increment(1)]));
+
+describe('ballots', () => {
   beforeEach(async () => {
     await seedVoting(env);
   });
 
-  it('accepts two votes and counts the ballot, not the voter', async () => {
+  it('accepts a first and a second choice and counts the ballot, not the voter', async () => {
     await assertSucceeds(vote(ana, [N_BIA, N_ADMIN]));
-    const round = await getDoc(roundDoc(dbAs(env, bia)));
-    expect(round.get('ballots')).toBe(1);
+    const cycle = await getDoc(cycleDoc(dbAs(env, bia)));
+    expect(cycle.get('ballots')).toBe(1);
   });
 
   it('lets a member who passed vote for any two books', async () => {
@@ -85,8 +96,9 @@ describe('first round', () => {
     await assertFails(getDoc(tallyDoc(dbAs(env, admin))));
   });
 
-  it('blocks voting for your own nomination', async () => {
+  it('blocks your own nomination, as first or as second choice', async () => {
     await assertFails(vote(ana, [N_ANA, N_BIA]));
+    await assertFails(vote(ana, [N_BIA, N_ANA]));
   });
 
   it('blocks voting twice', async () => {
@@ -105,7 +117,6 @@ describe('first round', () => {
   it('blocks casting a ballot for someone else', async () => {
     const forged = castBallot(dbAs(env, ana), {
       cycleId: CYCLE,
-      round: 1,
       uid: bia.uid,
       choices: [N_ANA, N_ADMIN],
     });
@@ -117,28 +128,52 @@ describe('first round', () => {
   });
 });
 
+describe('a short ballot', () => {
+  beforeEach(async () => {
+    await seedVoting(env, { options: [N_ANA, N_BIA] });
+  });
+
+  it('asks for one choice when only one other book is eligible', async () => {
+    await assertSucceeds(vote(ana, [N_BIA]));
+  });
+
+  it('still asks for two when two books are eligible', async () => {
+    await assertFails(vote(caio, [N_ANA]));
+    await assertSucceeds(vote(caio, [N_ANA, N_BIA]));
+  });
+});
+
 describe('forged ballots', () => {
   beforeEach(async () => {
     await seedVoting(env);
   });
 
   it('blocks giving one book two votes', async () => {
-    const db = dbAs(env, caio);
-    const batch = writeBatch(db);
-    batch.set(receiptDoc(db, caio.uid), {});
-    batch.update(roundDoc(db), { ballots: increment(1) });
-    batch.update(tallyDoc(db), { [`counts.${N_BIA}`]: increment(2) });
-    await assertFails(batch.commit());
+    await assertFails(
+      forgeAsCaio({ [`votes.${N_BIA}`]: increment(2), [`firsts.${N_BIA}`]: increment(1) }),
+    );
+  });
+
+  it('blocks a ballot without a first choice, or with two', async () => {
+    await assertFails(forgeAsCaio(plusOne(`votes.${N_ANA}`, `votes.${N_BIA}`)));
+    await assertFails(
+      forgeAsCaio(
+        plusOne(`votes.${N_ANA}`, `votes.${N_BIA}`, `firsts.${N_ANA}`, `firsts.${N_BIA}`),
+      ),
+    );
+  });
+
+  it('blocks a first choice for a book the ballot does not vote for', async () => {
+    await assertFails(
+      forgeAsCaio(plusOne(`votes.${N_BIA}`, `votes.${N_ADMIN}`, `firsts.${N_ANA}`)),
+    );
   });
 
   it('blocks votes without a receipt', async () => {
     const db = dbAs(env, caio);
     const batch = writeBatch(db);
-    batch.update(roundDoc(db), { ballots: increment(1) });
-    batch.update(tallyDoc(db), {
-      [`counts.${N_ANA}`]: increment(1),
-      [`counts.${N_BIA}`]: increment(1),
-    });
+    batch.update(cycleDoc(db), { ballots: increment(1) });
+    batch.update(tallyDoc(db), plusOne(`votes.${N_ANA}`, `votes.${N_BIA}`, `firsts.${N_ANA}`));
     await assertFails(batch.commit());
   });
 
@@ -148,7 +183,7 @@ describe('forged ballots', () => {
 
     const batch = writeBatch(db);
     batch.set(receiptDoc(db, caio.uid), {});
-    batch.update(roundDoc(db), { ballots: increment(1) });
+    batch.update(cycleDoc(db), { ballots: increment(1) });
     await assertFails(batch.commit());
   });
 
@@ -156,33 +191,36 @@ describe('forged ballots', () => {
     const db = dbAs(env, caio);
     const batch = writeBatch(db);
     batch.set(receiptDoc(db, caio.uid), {});
-    batch.update(roundDoc(db), { ballots: increment(1) });
-    batch.set(tallyDoc(db), { counts: { [N_ANA]: 9, [N_BIA]: 9, [N_ADMIN]: 0 } });
+    batch.update(cycleDoc(db), { ballots: increment(1) });
+    batch.set(tallyDoc(db), {
+      votes: { [N_ANA]: 9, [N_BIA]: 9, [N_ADMIN]: 0 },
+      firsts: { [N_ANA]: 9, [N_BIA]: 0, [N_ADMIN]: 0 },
+    });
     await assertFails(batch.commit());
 
-    await assertFails(updateDoc(tallyDoc(db), { [`counts.${N_ANA}`]: increment(-1) }));
+    await assertFails(updateDoc(tallyDoc(db), { [`votes.${N_ANA}`]: increment(-1) }));
   });
 
   it('blocks adding a new option to the tally', async () => {
-    const db = dbAs(env, caio);
-    const batch = writeBatch(db);
-    batch.set(receiptDoc(db, caio.uid), {});
-    batch.update(roundDoc(db), { ballots: increment(1) });
-    batch.update(tallyDoc(db), { [`counts.${N_ANA}`]: increment(1), 'counts.extra': 1 });
-    await assertFails(batch.commit());
+    await assertFails(
+      forgeAsCaio({
+        ...plusOne(`votes.${N_ANA}`, `votes.${N_BIA}`, `firsts.${N_ANA}`),
+        'votes.extra': 1,
+      }),
+    );
   });
 
-  it('blocks members from closing the round or moving the cycle', async () => {
+  it('blocks members from closing the vote or changing the ballot', async () => {
     const db = dbAs(env, ana);
-    await assertFails(updateDoc(roundDoc(db), { status: 'closed' }));
-    await assertFails(updateDoc(roundDoc(db), { ballots: 0 }));
-    await assertFails(updateDoc(doc(db, 'cycles', CYCLE), { status: 'tiebreak' }));
+    await assertFails(updateDoc(cycleDoc(db), { status: 'tallying' }));
+    await assertFails(updateDoc(cycleDoc(db), { ballots: 0 }));
+    await assertFails(updateDoc(cycleDoc(db), { options: [N_ANA] }));
   });
 });
 
 describe('timing', () => {
-  it('blocks votes once the round is closed', async () => {
-    await seedVoting(env, { round: { status: 'closed' } });
+  it('blocks votes once voting is closed', async () => {
+    await seedTallying(env);
     await assertFails(vote(caio, [N_ANA, N_BIA]));
   });
 
@@ -191,26 +229,8 @@ describe('timing', () => {
     await assertFails(vote(caio, [N_ANA, N_BIA]));
   });
 
-  it('shows the tally once the round is closed', async () => {
-    await seedVoting(env, { round: { status: 'closed' } });
+  it('shows the tally once voting is closed', async () => {
+    await seedTallying(env);
     await assertSucceeds(getDoc(tallyDoc(dbAs(env, ana))));
-  });
-});
-
-describe('runoff', () => {
-  beforeEach(async () => {
-    await seedVoting(env, { round: { number: 2, kind: 'runoff', options: [N_ANA, N_BIA] } });
-  });
-
-  it('lets you vote for your own book', async () => {
-    await assertSucceeds(vote(ana, [N_ANA], 2));
-  });
-
-  it('allows a single vote', async () => {
-    await assertFails(vote(caio, [N_ANA, N_BIA], 2));
-  });
-
-  it('only accepts books that are in the runoff', async () => {
-    await assertFails(vote(caio, [N_ADMIN], 2));
   });
 });

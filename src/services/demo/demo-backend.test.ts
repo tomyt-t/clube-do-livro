@@ -93,19 +93,13 @@ describe('demo ballots', () => {
     const rafa = `${await answerAs(backend, cycleId, 'rafa')}`;
     const julia = `${await answerAs(backend, cycleId, 'julia')}`;
     const teo = `${await answerAs(backend, cycleId, 'teo')}`;
-    await backend.admin.openRound({
-      cycleId,
-      number: 1,
-      kind: 'first',
-      options: [rafa, julia, teo],
-      votingDeadline: null,
-    });
+    await backend.admin.startVoting({ cycleId, options: [rafa, julia, teo], votingDeadline: null });
     return { backend, cycleId, rafa, julia, teo };
   }
 
   it('blocks voting for your own book and voting twice', async () => {
     const { backend, cycleId, rafa, julia, teo } = await votingCycle();
-    const ballot = { cycleId, round: 1, uid: 'rafa' };
+    const ballot = { cycleId, uid: 'rafa' };
 
     await expect(voteAs(backend, { ...ballot, choices: [rafa, julia] })).rejects.toMatchObject(
       denied,
@@ -118,22 +112,35 @@ describe('demo ballots', () => {
 
   it('tells members whether they already voted', async () => {
     const { backend, cycleId, julia, teo } = await votingCycle();
-    await voteAs(backend, { cycleId, round: 1, uid: 'rafa', choices: [julia, teo] });
+    await voteAs(backend, { cycleId, uid: 'rafa', choices: [julia, teo] });
 
-    const voted = await firstValue<boolean>((s) =>
-      backend.club.watchHasVoted(cycleId, 1, 'rafa', s),
-    );
-    const notYet = await firstValue<boolean>((s) =>
-      backend.club.watchHasVoted(cycleId, 1, 'lia', s),
-    );
+    const voted = await firstValue<boolean>((s) => backend.club.watchHasVoted(cycleId, 'rafa', s));
+    const notYet = await firstValue<boolean>((s) => backend.club.watchHasVoted(cycleId, 'lia', s));
     expect([voted, notYet]).toEqual([true, false]);
   });
 
-  it('closes voting with the round', async () => {
+  it('counts every choice as a vote and the first one also as a first choice', async () => {
+    const { backend, cycleId, rafa, julia, teo } = await votingCycle();
+    await voteAs(backend, { cycleId, uid: 'lia', choices: [teo, rafa] });
+    await voteAs(backend, { cycleId, uid: 'bruno', choices: [julia, teo] });
+    await backend.admin.closeVoting(cycleId);
+
+    expect(await backend.admin.readResults(cycleId)).toEqual({
+      votes: { [rafa]: 1, [julia]: 1, [teo]: 2 },
+      firsts: { [rafa]: 0, [julia]: 1, [teo]: 1 },
+    });
+  });
+
+  it('keeps the tally sealed until voting closes', async () => {
+    const { backend, cycleId } = await votingCycle();
+    await expect(backend.admin.readResults(cycleId)).rejects.toMatchObject(denied);
+  });
+
+  it('stops accepting ballots once voting closes', async () => {
     const { backend, cycleId, julia, teo } = await votingCycle();
-    await backend.admin.closeRound(cycleId, 1);
+    await backend.admin.closeVoting(cycleId);
     await expect(
-      voteAs(backend, { cycleId, round: 1, uid: 'lia', choices: [julia, teo] }),
+      voteAs(backend, { cycleId, uid: 'lia', choices: [julia, teo] }),
     ).rejects.toMatchObject(denied);
   });
 });

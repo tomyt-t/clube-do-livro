@@ -1,57 +1,90 @@
-import type { NominationId, RoundKind, Tally } from './types';
+import { drawWinner, secureRandom } from './draw';
+import type { DecisionMethod, NominationId, RankedChoices, Tally, VoteResults } from './types';
 
 export interface Standing {
   nominationId: NominationId;
   votes: number;
-  /** Fraction of all votes cast in the round, from 0 to 1. */
+  firsts: number;
+  /** Fraction of all votes cast, from 0 to 1. */
   share: number;
 }
 
-export type RoundOutcome =
-  { kind: 'winner'; nominationId: NominationId } | { kind: 'tie'; tied: NominationId[] };
-
-/** What the election does after a round closes. */
-export type NextStep =
-  | { kind: 'declare-winner'; nominationId: NominationId }
-  | { kind: 'open-runoff'; options: NominationId[] }
-  | { kind: 'draw'; candidates: NominationId[] };
-
-export function emptyTally(options: readonly NominationId[]): Tally {
-  return Object.fromEntries(options.map((option) => [option, 0]));
+export interface Decision {
+  nominationId: NominationId;
+  method: DecisionMethod;
+  /** The books still tied when a draw was needed. */
+  drawnFrom: NominationId[];
 }
 
-function votesFor(results: Tally, option: NominationId): number {
-  return results[option] ?? 0;
+const count = (tally: Tally, option: NominationId) => tally[option] ?? 0;
+
+export function emptyResults(options: readonly NominationId[]): VoteResults {
+  const zeros = Object.fromEntries(options.map((option) => [option, 0]));
+  return { votes: { ...zeros }, firsts: { ...zeros } };
 }
 
-/** Options ordered by votes (desc). Ties keep the round's option order. */
-export function rankStandings(options: readonly NominationId[], results: Tally): Standing[] {
-  const total = options.reduce((sum, option) => sum + votesFor(results, option), 0);
+/** Adds one ballot to the results: every choice is a vote, the first is also a first choice. */
+export function addBallot(results: VoteResults, choices: RankedChoices): VoteResults {
+  const [first] = choices;
+  const votes = { ...results.votes };
+  const firsts = { ...results.firsts };
+  choices.forEach((choice) => {
+    votes[choice] = count(votes, choice) + 1;
+  });
+  if (first !== undefined) firsts[first] = count(firsts, first) + 1;
+  return { votes, firsts };
+}
+
+/** Most votes first; ties ordered by first choices, then by ballot order. */
+export function rankStandings(options: readonly NominationId[], results: VoteResults): Standing[] {
+  const total = options.reduce((sum, option) => sum + count(results.votes, option), 0);
   return options
     .map((nominationId) => {
-      const votes = votesFor(results, nominationId);
-      return { nominationId, votes, share: total === 0 ? 0 : votes / total };
+      const votes = count(results.votes, nominationId);
+      const firsts = count(results.firsts, nominationId);
+      return { nominationId, votes, firsts, share: total === 0 ? 0 : votes / total };
     })
-    .sort((a, b) => b.votes - a.votes);
+    .sort((a, b) => b.votes - a.votes || b.firsts - a.firsts);
 }
 
-export function decideRound(options: readonly NominationId[], results: Tally): RoundOutcome {
+function topBy(options: readonly NominationId[], tally: Tally): NominationId[] {
+  const best = Math.max(...options.map((option) => count(tally, option)));
+  return options.filter((option) => count(tally, option) === best);
+}
+
+/**
+ * The books still tied after both criteria (most votes, then most first
+ * choices): one book, or the ones that went to the draw.
+ */
+export function finalists(options: readonly NominationId[], results: VoteResults): NominationId[] {
+  return topBy(topBy(options, results.votes), results.firsts);
+}
+
+/**
+ * The club's rule: the most votes wins. A tie goes to the most first
+ * choices; if still tied, a draw among the books left.
+ */
+export function decide(
+  options: readonly NominationId[],
+  results: VoteResults,
+  random: () => number = secureRandom,
+): Decision {
   if (options.length === 0) throw new Error('Não há opções para apurar.');
-
-  const top = Math.max(...options.map((option) => votesFor(results, option)));
-  const leaders = options.filter((option) => votesFor(results, option) === top);
-  const [first] = leaders;
-
-  if (leaders.length === 1 && first !== undefined) return { kind: 'winner', nominationId: first };
-  return { kind: 'tie', tied: leaders };
-}
-
-/** A first-round tie goes to a runoff; a runoff tie goes to a draw. */
-export function nextStep(kind: RoundKind, outcome: RoundOutcome): NextStep {
-  if (outcome.kind === 'winner') {
-    return { kind: 'declare-winner', nominationId: outcome.nominationId };
+  const [only] = options;
+  if (options.length === 1 && only !== undefined) {
+    return { nominationId: only, method: 'unopposed', drawnFrom: [] };
   }
-  return kind === 'first'
-    ? { kind: 'open-runoff', options: outcome.tied }
-    : { kind: 'draw', candidates: outcome.tied };
+
+  const byVotes = topBy(options, results.votes);
+  const [leader] = byVotes;
+  if (byVotes.length === 1 && leader !== undefined) {
+    return { nominationId: leader, method: 'votes', drawnFrom: [] };
+  }
+
+  const byFirsts = finalists(byVotes, results);
+  const [firstChoice] = byFirsts;
+  if (byFirsts.length === 1 && firstChoice !== undefined) {
+    return { nominationId: firstChoice, method: 'first-choices', drawnFrom: [] };
+  }
+  return { nominationId: drawWinner(byFirsts, random), method: 'draw', drawnFrom: byFirsts };
 }

@@ -1,4 +1,4 @@
-import type { Book, Cycle, CycleId, Nomination, Round } from '@/domain/types';
+import type { Book, Cycle, CycleId, Nomination } from '@/domain/types';
 import type { Subscriber, Unsubscribe } from '@/services/backend';
 import { createDemoBackend, createEmptyDemoState, type DemoBackend } from '@/services/demo';
 import type { ElectionContext } from '@/services/election';
@@ -37,8 +37,7 @@ export async function electionContext(
   const nominations = await firstValue<Nomination[]>((s) =>
     backend.club.watchNominations(cycleId, s),
   );
-  const rounds = await firstValue<Round[]>((s) => backend.club.watchRounds(cycleId, s));
-  return { cycles, cycle, nominations, rounds };
+  return { cycles, cycle, nominations };
 }
 
 /** Signs in as `uid`, sends their answer, then returns to the organizer. */
@@ -57,7 +56,7 @@ export async function answerAs(
 
 export async function voteAs(
   backend: DemoBackend,
-  ballot: { cycleId: CycleId; round: number; uid: string; choices: string[] },
+  ballot: { cycleId: CycleId; uid: string; choices: string[] },
 ) {
   backend.auth.signInAs(ballot.uid);
   try {

@@ -1,6 +1,6 @@
 /**
  * Core vocabulary of the club. A *cycle* is one pass of
- * nominate → vote → (runoff) → (draw) → read, and produces one book.
+ * nominate → vote → count → read, and produces one book.
  */
 
 export type MemberId = string;
@@ -23,14 +23,18 @@ export interface Book {
 export type CycleStatus =
   | 'nominating'
   | 'voting'
-  /** The runoff also ended tied; waiting for the animated draw. */
-  | 'tiebreak'
+  /** Voting closed; the organizer is counting. */
+  | 'tallying'
   /** Decided while another book was still being read. */
   | 'upcoming'
   | 'reading'
   | 'finished';
 
-export type DecisionMethod = 'votes' | 'draw' | 'unopposed';
+/**
+ * Why the winner won: most votes; a tie broken by first choices; a tie
+ * that remained and was drawn; or the only nomination.
+ */
+export type DecisionMethod = 'votes' | 'first-choices' | 'draw' | 'unopposed';
 
 export interface Winner {
   nominationId: NominationId;
@@ -39,17 +43,33 @@ export interface Winner {
   decidedAt: Date;
 }
 
+/** Counts per nomination. */
+export type Tally = Readonly<Record<NominationId, number>>;
+
+/** Readable only once voting has closed. */
+export interface VoteResults {
+  /** Every vote, first and second choices alike. */
+  votes: Tally;
+  /** First choices only: they break ties. */
+  firsts: Tally;
+}
+
 export interface Cycle {
   id: CycleId;
   number: number;
   status: CycleStatus;
-  /** 0 while nominating; 1 for the first round, 2+ for runoffs. */
-  currentRound: number;
   /** Members who answered the nomination call, whether they nominated or not. */
   responses: number;
   nominationDeadline: Date | null;
   votingDeadline: Date | null;
   createdAt: Date;
+  /** The nominations on the ballot, fixed when voting opens. */
+  options: NominationId[];
+  /** How many members have voted; never who or for what. */
+  ballots: number;
+  votingOpenedAt: Date | null;
+  votingClosedAt: Date | null;
+  results: VoteResults | null;
   winner: Winner | null;
   readingStartedAt: Date | null;
   finishedAt: Date | null;
@@ -67,20 +87,5 @@ export type NominationAnswer = { kind: 'nominate'; book: Book } | { kind: 'pass'
 /** The member's own answer, visible only to them. */
 export type OwnAnswer = { kind: 'nominated'; nominationId: NominationId } | { kind: 'passed' };
 
-export type RoundKind = 'first' | 'runoff';
-
-/** Votes per option. Only readable once the round is closed. */
-export type Tally = Readonly<Record<NominationId, number>>;
-
-export interface Round {
-  number: number;
-  kind: RoundKind;
-  options: readonly NominationId[];
-  votesPerMember: number;
-  status: 'open' | 'closed';
-  /** How many members have voted; never who or for what. */
-  ballots: number;
-  openedAt: Date;
-  closedAt: Date | null;
-  results: Tally | null;
-}
+/** A ballot in order of preference: first choice, then second choice. */
+export type RankedChoices = readonly NominationId[];

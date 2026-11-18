@@ -2,16 +2,14 @@ import { assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-
 import { doc, getDoc } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 
-import { drawWinner } from '@/domain/draw';
-import { decideRound, nextStep } from '@/domain/tally';
+import { decide } from '@/domain/tally';
 import type { Book, NominationId } from '@/domain/types';
 import {
-  closeRound,
+  closeVoting,
   declareWinner,
-  enterTiebreak,
   openCycle,
-  openRound,
-  recordResults,
+  readResults,
+  startVoting,
 } from '@/services/firebase/admin-writes';
 import { answerNominationCall, castBallot } from '@/services/firebase/member-writes';
 import { makeBook } from '@/test/factories';
@@ -35,9 +33,9 @@ beforeEach(async () => {
 
 /**
  * One whole cycle through the same writes the app makes: nominations,
- * a tied first round, a tied runoff and the draw.
+ * ranked ballots, a tie on votes broken by first choices.
  */
-it('runs a full cycle from nominations to the draw', async () => {
+it('runs a full cycle from nominations to the winner', async () => {
   const adminDb = dbAs(env, admin);
   const cycleId = await assertSucceeds(openCycle(adminDb, { number: 1, nominationDeadline: null }));
 
@@ -57,56 +55,40 @@ it('runs a full cycle from nominations to the draw', async () => {
   await answerNominationCall(dbAs(env, caio), { cycleId, uid: caio.uid, answer: { kind: 'pass' } });
 
   const options = [fromAna, fromBia, fromAdmin];
-  await openRound(adminDb, { cycleId, number: 1, kind: 'first', options, votingDeadline: null });
+  await assertSucceeds(startVoting(adminDb, { cycleId, options, votingDeadline: null }));
 
-  const vote = (persona: Persona, round: number, choices: NominationId[]) =>
-    castBallot(dbAs(env, persona), { cycleId, round, uid: persona.uid, choices });
+  const vote = (persona: Persona, choices: NominationId[]) =>
+    assertSucceeds(castBallot(dbAs(env, persona), { cycleId, uid: persona.uid, choices }));
 
-  await vote(ana, 1, [fromBia, fromAdmin]);
-  await vote(bia, 1, [fromAna, fromAdmin]);
-  await vote(caio, 1, [fromBia, fromAdmin]);
-  await vote(admin, 1, [fromAna, fromBia]);
+  await vote(ana, [fromBia, fromAdmin]);
+  await vote(bia, [fromAdmin, fromAna]);
+  await vote(caio, [fromBia, fromAna]);
+  await vote(admin, [fromAna, fromBia]);
 
-  await closeRound(adminDb, cycleId, 1);
-  const firstResults = await recordResults(adminDb, cycleId, 1);
-  expect(firstResults).toEqual({ [fromAna]: 2, [fromBia]: 3, [fromAdmin]: 3 });
-
-  const afterFirst = nextStep('first', decideRound(options, firstResults));
-  expect(afterFirst).toEqual({ kind: 'open-runoff', options: [fromBia, fromAdmin] });
-  if (afterFirst.kind !== 'open-runoff') return;
-
-  await openRound(adminDb, {
-    cycleId,
-    number: 2,
-    kind: 'runoff',
-    options: afterFirst.options,
-    votingDeadline: null,
+  await assertSucceeds(closeVoting(adminDb, cycleId));
+  const results = await assertSucceeds(readResults(adminDb, cycleId));
+  expect(results).toEqual({
+    votes: { [fromAna]: 3, [fromBia]: 3, [fromAdmin]: 2 },
+    firsts: { [fromAna]: 1, [fromBia]: 2, [fromAdmin]: 1 },
   });
-  await vote(ana, 2, [fromBia]);
-  await vote(bia, 2, [fromBia]);
-  await vote(caio, 2, [fromAdmin]);
-  await vote(admin, 2, [fromAdmin]);
 
-  await closeRound(adminDb, cycleId, 2);
-  const runoffResults = await recordResults(adminDb, cycleId, 2);
-  const afterRunoff = nextStep('runoff', decideRound(afterFirst.options, runoffResults));
-  expect(afterRunoff).toEqual({ kind: 'draw', candidates: [fromBia, fromAdmin] });
-  if (afterRunoff.kind !== 'draw') return;
+  const decision = decide(options, results);
+  expect(decision).toEqual({ nominationId: fromBia, method: 'first-choices', drawnFrom: [] });
 
-  await enterTiebreak(adminDb, cycleId);
-  const winner = drawWinner(afterRunoff.candidates);
-  const nomination = await getDoc(doc(adminDb, 'cycles', cycleId, 'nominations', winner));
+  const nomination = await getDoc(doc(adminDb, 'cycles', cycleId, 'nominations', fromBia));
   await assertSucceeds(
     declareWinner(adminDb, {
       cycleId,
-      nominationId: winner,
+      nominationId: fromBia,
       book: nomination.get('book') as Book,
-      method: 'draw',
+      method: decision.method,
+      results,
       startReading: true,
     }),
   );
 
   const cycle = await getDoc(doc(dbAs(env, caio), 'cycles', cycleId));
   expect(cycle.get('status')).toBe('reading');
-  expect(cycle.get('winner.nominationId')).toBe(winner);
+  expect(cycle.get('winner.nominationId')).toBe(fromBia);
+  expect(cycle.get('results')).toEqual(results);
 });

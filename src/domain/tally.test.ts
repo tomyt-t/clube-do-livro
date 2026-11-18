@@ -1,72 +1,82 @@
 import { describe, expect, it } from 'vitest';
 
-import { decideRound, emptyTally, nextStep, rankStandings } from './tally';
+import { addBallot, decide, emptyResults, finalists, rankStandings } from './tally';
+import type { VoteResults } from './types';
 
-describe('emptyTally', () => {
-  it('starts every option at zero', () => {
-    expect(emptyTally(['a', 'b'])).toEqual({ a: 0, b: 0 });
+const results = (votes: Record<string, number>, firsts: Record<string, number>): VoteResults => ({
+  votes,
+  firsts,
+});
+
+describe('emptyResults and addBallot', () => {
+  it('counts every choice as a vote and the first one also as a first choice', () => {
+    let tally = emptyResults(['a', 'b', 'c']);
+    tally = addBallot(tally, ['b', 'c']);
+    tally = addBallot(tally, ['c', 'a']);
+    expect(tally).toEqual({ votes: { a: 1, b: 1, c: 2 }, firsts: { a: 0, b: 1, c: 1 } });
   });
 });
 
 describe('rankStandings', () => {
-  it('orders by votes and computes each share', () => {
-    expect(rankStandings(['a', 'b', 'c'], { a: 1, b: 3, c: 0 })).toEqual([
-      { nominationId: 'b', votes: 3, share: 0.75 },
-      { nominationId: 'a', votes: 1, share: 0.25 },
-      { nominationId: 'c', votes: 0, share: 0 },
+  it('orders by votes, then by first choices, and computes shares', () => {
+    const ranked = rankStandings(
+      ['a', 'b', 'c'],
+      results({ a: 2, b: 4, c: 2 }, { a: 0, b: 1, c: 2 }),
+    );
+    expect(ranked).toEqual([
+      { nominationId: 'b', votes: 4, firsts: 1, share: 0.5 },
+      { nominationId: 'c', votes: 2, firsts: 2, share: 0.25 },
+      { nominationId: 'a', votes: 2, firsts: 0, share: 0.25 },
     ]);
   });
 
-  it('keeps option order between tied options', () => {
-    const ranked = rankStandings(['a', 'b', 'c'], { a: 2, b: 2, c: 2 });
-    expect(ranked.map((standing) => standing.nominationId)).toEqual(['a', 'b', 'c']);
-  });
-
-  it('treats missing counts as zero and avoids dividing by zero', () => {
-    expect(rankStandings(['a'], {})).toEqual([{ nominationId: 'a', votes: 0, share: 0 }]);
+  it('avoids dividing by zero', () => {
+    expect(rankStandings(['a'], emptyResults(['a']))[0]?.share).toBe(0);
   });
 });
 
-describe('decideRound', () => {
-  it('declares the single leader the winner', () => {
-    expect(decideRound(['a', 'b'], { a: 3, b: 1 })).toEqual({ kind: 'winner', nominationId: 'a' });
+describe('finalists', () => {
+  it('keeps the books tied on votes and on first choices', () => {
+    const tied = results({ a: 5, b: 5, c: 5, d: 1 }, { a: 2, b: 2, c: 1, d: 1 });
+    expect(finalists(['a', 'b', 'c', 'd'], tied)).toEqual(['a', 'b']);
   });
 
-  it('reports every option tied at the top', () => {
-    expect(decideRound(['a', 'b', 'c'], { a: 2, b: 1, c: 2 })).toEqual({
-      kind: 'tie',
-      tied: ['a', 'c'],
-    });
-  });
-
-  it('treats a round with no votes as a tie between all options', () => {
-    expect(decideRound(['a', 'b'], {})).toEqual({ kind: 'tie', tied: ['a', 'b'] });
-  });
-
-  it('refuses to decide a round without options', () => {
-    expect(() => decideRound([], {})).toThrow();
+  it('narrows down to one book when the rule decides', () => {
+    expect(finalists(['a', 'b'], results({ a: 3, b: 2 }, { a: 0, b: 2 }))).toEqual(['a']);
   });
 });
 
-describe('nextStep', () => {
-  it('declares the winner when there is one', () => {
-    expect(nextStep('first', { kind: 'winner', nominationId: 'a' })).toEqual({
-      kind: 'declare-winner',
+describe('decide', () => {
+  it('gives it to the most votes, whatever the first choices say', () => {
+    // 2 first + 8 second (10 votes) beats 7 first + 2 second (9 votes).
+    const decision = decide(['a', 'b'], results({ a: 10, b: 9 }, { a: 2, b: 7 }));
+    expect(decision).toEqual({ nominationId: 'a', method: 'votes', drawnFrom: [] });
+  });
+
+  it('breaks a tie by first choices', () => {
+    const decision = decide(['a', 'b', 'c'], results({ a: 5, b: 5, c: 5 }, { a: 1, b: 3, c: 1 }));
+    expect(decision).toEqual({ nominationId: 'b', method: 'first-choices', drawnFrom: [] });
+  });
+
+  it('draws among the books still tied after first choices', () => {
+    const tied = results({ a: 5, b: 5, c: 5 }, { a: 2, b: 2, c: 1 });
+    expect(decide(['a', 'b', 'c'], tied, () => 0)).toEqual({
       nominationId: 'a',
+      method: 'draw',
+      drawnFrom: ['a', 'b'],
     });
+    expect(decide(['a', 'b', 'c'], tied, () => 0.99).nominationId).toBe('b');
   });
 
-  it('sends a first-round tie to a runoff', () => {
-    expect(nextStep('first', { kind: 'tie', tied: ['a', 'b'] })).toEqual({
-      kind: 'open-runoff',
-      options: ['a', 'b'],
-    });
+  it('treats a single nomination as unopposed', () => {
+    expect(decide(['a'], emptyResults(['a'])).method).toBe('unopposed');
   });
 
-  it('sends a runoff tie to a draw', () => {
-    expect(nextStep('runoff', { kind: 'tie', tied: ['a', 'b'] })).toEqual({
-      kind: 'draw',
-      candidates: ['a', 'b'],
-    });
+  it('draws among everyone when nobody voted', () => {
+    expect(decide(['a', 'b'], emptyResults(['a', 'b']), () => 0).method).toBe('draw');
+  });
+
+  it('refuses to decide without options', () => {
+    expect(() => decide([], emptyResults([]))).toThrow();
   });
 });

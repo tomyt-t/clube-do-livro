@@ -26,9 +26,9 @@ describe('cycle selectors', () => {
     expect(findActiveElection([finishedOne])).toBeNull();
   });
 
-  it('treats a pending draw as part of the election', () => {
-    const tiebreak = makeCycle({ number: 5, status: 'tiebreak' });
-    expect(findActiveElection([tiebreak])).toBe(tiebreak);
+  it('treats the counting as part of the election', () => {
+    const tallying = makeCycle({ number: 5, status: 'tallying' });
+    expect(findActiveElection([tallying])).toBe(tallying);
   });
 
   it('finds the book being read and the one coming next', () => {
@@ -61,7 +61,7 @@ describe('electionStep', () => {
   it.each([
     ['nominating', 'nominations'],
     ['voting', 'voting'],
-    ['tiebreak', 'result'],
+    ['tallying', 'voting'],
     ['reading', 'result'],
   ] as const)('maps %s to %s', (status, step) => {
     expect(electionStep(status)).toBe(step);

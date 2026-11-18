@@ -56,27 +56,28 @@ export async function answerNominationCall(
 
 interface BallotInput {
   cycleId: CycleId;
-  round: number;
   uid: MemberId;
+  /** First choice, then second choice. */
   choices: readonly NominationId[];
 }
 
 /**
  * Casts an anonymous ballot: an empty receipt says *that* the member voted,
- * the tally says *what* was voted, and nothing connects the two.
+ * the tally says *what* was voted, and nothing connects the two. Every
+ * choice adds a vote; the first one also adds a first choice.
  */
-export async function castBallot(db: Firestore, { cycleId, round, uid, choices }: BallotInput) {
-  const [first, ...others] = choices;
+export async function castBallot(db: Firestore, { cycleId, uid, choices }: BallotInput) {
+  const [first] = choices;
   if (first === undefined) throw new Error('A cédula precisa de pelo menos uma escolha.');
 
   const batch = writeBatch(db);
-  batch.set(refs.receipt(db, cycleId, round, uid), {});
-  batch.update(refs.round(db, cycleId, round), { ballots: increment(1) });
+  batch.set(refs.receipt(db, cycleId, uid), {});
+  batch.update(refs.cycle(db, cycleId), { ballots: increment(1) });
   batch.update(
-    refs.tally(db, cycleId, round),
-    new FieldPath('counts', first),
+    refs.tally(db, cycleId),
+    new FieldPath('firsts', first),
     increment(1),
-    ...others.flatMap((choice) => [new FieldPath('counts', choice), increment(1)]),
+    ...choices.flatMap((choice) => [new FieldPath('votes', choice), increment(1)]),
   );
   await batch.commit();
 }

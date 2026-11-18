@@ -1,12 +1,13 @@
 import { isPastDeadline } from '@/domain/cycle';
 import { normalizeBook, validateBook } from '@/domain/book';
-import type { Cycle, CycleId, NominationAnswer, NominationId, Round } from '@/domain/types';
+import { addBallot } from '@/domain/tally';
+import type { Cycle, CycleId, NominationAnswer, NominationId, VoteResults } from '@/domain/types';
 import { ownNominationOf, validateBallot } from '@/domain/voting';
 
 import { BackendError, type BallotInput, type ClubPort, type Subscriber } from '../backend';
 
 import { deny, pause, requireMember, requireSelf, type DemoContext } from './context';
-import { roundKey, type DemoState } from './state';
+import type { DemoState } from './state';
 
 function watch<T>(
   context: DemoContext,
@@ -35,21 +36,20 @@ function assertCanAnswer(context: DemoContext, cycleId: CycleId, uid: string) {
   }
 }
 
-function isAcceptingVotes(cycle: Cycle, round: Round): boolean {
-  return (
-    round.status === 'open' && cycle.status === 'voting' && !isPastDeadline(cycle.votingDeadline)
-  );
+function isAcceptingVotes(cycle: Cycle): boolean {
+  return cycle.status === 'voting' && !isPastDeadline(cycle.votingDeadline);
 }
 
-function assertCanVote(context: DemoContext, input: BallotInput) {
+/** Returns the tally the ballot will be added to. */
+function assertCanVote(context: DemoContext, input: BallotInput): VoteResults {
   const state = context.store.current;
   const cycle = cycleOf(context, input.cycleId);
-  const round = state.rounds[input.cycleId]?.find((r) => r.number === input.round) ?? deny();
-  const voted = state.receipts[roundKey(input.cycleId, input.round)]?.includes(input.uid) ?? false;
+  const voted = state.receipts[input.cycleId]?.includes(input.uid) ?? false;
   const own = ownNominationOf(state.answers[input.cycleId]?.[input.uid] ?? null);
 
-  if (voted || !isAcceptingVotes(cycle, round)) deny();
-  if (validateBallot(round, own, input.choices) !== null) deny();
+  if (voted || !isAcceptingVotes(cycle) || input.choices.length === 0) deny();
+  if (validateBallot(cycle.options, own, input.choices) !== null) deny();
+  return state.tallies[input.cycleId] ?? deny();
 }
 
 export function createDemoClub(context: DemoContext): ClubPort {
@@ -61,18 +61,11 @@ export function createDemoClub(context: DemoContext): ClubPort {
     watchNominations: (cycleId, subscriber) =>
       watch(context, (state) => state.nominations[cycleId] ?? [], subscriber),
 
-    watchRounds: (cycleId, subscriber) =>
-      watch(context, (state) => state.rounds[cycleId] ?? [], subscriber),
-
     watchOwnAnswer: (cycleId, uid, subscriber) =>
       watch(context, (state) => state.answers[cycleId]?.[uid] ?? null, subscriber),
 
-    watchHasVoted: (cycleId, round, uid, subscriber) =>
-      watch(
-        context,
-        (state) => state.receipts[roundKey(cycleId, round)]?.includes(uid) ?? false,
-        subscriber,
-      ),
+    watchHasVoted: (cycleId, uid, subscriber) =>
+      watch(context, (state) => state.receipts[cycleId]?.includes(uid) ?? false, subscriber),
 
     watchMembers: (subscriber) =>
       watch(context, (state) => Object.values(state.members), subscriber),
@@ -110,17 +103,14 @@ export function createDemoClub(context: DemoContext): ClubPort {
       await pause(context);
       requireMember(context);
       requireSelf(context, input.uid);
-      assertCanVote(context, input);
+      const tally = assertCanVote(context, input);
 
-      const key = roundKey(input.cycleId, input.round);
+      const { cycleId, uid, choices } = input;
       store.update((state) => {
-        state.receipts[key] = [...(state.receipts[key] ?? []), input.uid];
-        const tally = (state.tallies[key] ??= {});
-        input.choices.forEach((choice) => {
-          tally[choice] = (tally[choice] ?? 0) + 1;
-        });
-        const round = state.rounds[input.cycleId]?.find((r) => r.number === input.round);
-        if (round) round.ballots += 1;
+        state.receipts[cycleId] = [...(state.receipts[cycleId] ?? []), uid];
+        state.tallies[cycleId] = addBallot(tally, choices);
+        const cycle = state.cycles[cycleId];
+        if (cycle) cycle.ballots += 1;
       });
     },
   };

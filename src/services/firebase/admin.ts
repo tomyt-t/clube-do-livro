@@ -2,17 +2,16 @@ import type { AdminPort } from '../backend';
 
 import {
   allowEmails,
-  closeRound,
+  closeVoting,
   declareWinner,
   deleteCycle,
-  enterTiebreak,
   finishReading,
   openCycle,
-  openRound,
-  recordResults,
+  readResults,
   revokeEmail,
   setDeadline,
   startReading,
+  startVoting,
 } from './admin-writes';
 import type { FirebaseServices } from './app';
 import { toAllowlistEntry } from './converters';
@@ -25,10 +24,9 @@ export function createFirebaseAdmin({ db }: FirebaseServices): AdminPort {
     openCycle: (input) => guard(openCycle(db, input)),
     setDeadline: (cycleId, field, deadline) => guard(setDeadline(db, cycleId, field, deadline)),
     deleteCycle: (cycleId) => guard(deleteCycle(db, cycleId)),
-    openRound: (input) => guard(openRound(db, input)),
-    closeRound: (cycleId, round) => guard(closeRound(db, cycleId, round)),
-    recordResults: (cycleId, round) => guard(recordResults(db, cycleId, round)),
-    enterTiebreak: (cycleId) => guard(enterTiebreak(db, cycleId)),
+    startVoting: (input) => guard(startVoting(db, input)),
+    closeVoting: (cycleId) => guard(closeVoting(db, cycleId)),
+    readResults: (cycleId) => guard(readResults(db, cycleId)),
     declareWinner: (input) => guard(declareWinner(db, input)),
     startReading: (cycleId) => guard(startReading(db, cycleId)),
     finishReading: (cycleId) => guard(finishReading(db, cycleId)),

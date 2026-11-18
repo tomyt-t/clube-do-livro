@@ -7,14 +7,18 @@ rules_version = '2';
 //   nominations and ballot receipts can never be edited or deleted, so nobody
 //   (including the admin) can change what another member sent.
 // * Votes are anonymous: a ballot is one batch that creates an empty receipt
-//   (who voted), bumps the round's ballot count and adds +1 to the chosen
-//   options in a tally that nobody can read until the round is closed.
-//   Nothing links a member to their choices.
-// * Admin writes follow a state machine and cannot touch tallies.
+//   (who voted), bumps the cycle's ballot count and adds +1 to the chosen
+//   books in a tally (every choice to `votes`, the first one also to
+//   `firsts`) that nobody can read until voting closes. Nothing links a
+//   member to their choices.
+// * Admin writes follow a state machine and cannot touch the tally; the
+//   declared winner must follow the club's rule (most votes, then most first
+//   choices, then a draw among the books still tied).
 // * Everything not explicitly allowed is denied.
 //
-// Limits shared with src/domain: book fields (book.ts) and 30 options per
-// round (voting.ts). Rules have no loops, so list checks are unrolled.
+// Limits shared with src/domain: book fields (book.ts), two choices per
+// ballot and 30 options (voting.ts). Rules have no loops, so list checks are
+// unrolled.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -59,16 +63,12 @@ service cloud.firestore {
       return /databases/$(database)/documents/cycles/$(c)/answers/$(request.auth.uid);
     }
 
-    function roundPath(c, r) {
-      return /databases/$(database)/documents/cycles/$(c)/rounds/$(r);
+    function tallyPath(c) {
+      return /databases/$(database)/documents/cycles/$(c)/tally/counts;
     }
 
-    function tallyPath(c, r) {
-      return /databases/$(database)/documents/cycles/$(c)/rounds/$(r)/tally/counts;
-    }
-
-    function receiptPath(c, r) {
-      return /databases/$(database)/documents/cycles/$(c)/rounds/$(r)/receipts/$(request.auth.uid);
+    function receiptPath(c) {
+      return /databases/$(database)/documents/cycles/$(c)/receipts/$(request.auth.uid);
     }
 
     // ------------------------------------------------------------- validation
@@ -145,6 +145,7 @@ service cloud.firestore {
       allow read: if isMember();
       allow create: if isAdmin() && isNewCycle(request.resource.data);
       allow update: if (isMember() && countsOwnAnswer(cycleId))
+        || (isMember() && countsOwnBallot(cycleId))
         || (isAdmin() && isValidTransition(cycleId, resource.data, request.resource.data));
       // A cycle can be dropped only before any vote exists.
       allow delete: if isAdmin() && resource.data.status == 'nominating';
@@ -166,26 +167,20 @@ service cloud.firestore {
         allow create: if isMember() && isNewNomination(cycleId, nominationId);
       }
 
-      // ----------------------------------------------------------- rounds
+      // ---------------------------------------------------------- ballots
+      // A receipt says only *that* a member voted; the tally says only
+      // *what* was voted.
 
-      match /rounds/{roundId} {
-        allow read: if isMember();
-        allow create: if isAdmin() && isNewRound(cycleId, roundId, request.resource.data);
-        allow update: if (isMember() && countsOwnBallot(cycleId, roundId))
-          || (isAdmin() && closesRound(cycleId, roundId))
-          || (isAdmin() && recordsResults(cycleId, roundId));
+      match /receipts/{uid} {
+        allow get: if isMember() && isSelf(uid);
+        allow create: if isMember() && isSelf(uid) && isNewReceipt(cycleId);
+      }
 
-        match /receipts/{uid} {
-          allow get: if isMember() && isSelf(uid);
-          allow create: if isMember() && isSelf(uid) && isNewReceipt(cycleId, roundId);
-        }
-
-        match /tally/{docId} {
-          allow get: if isMember() && docId == 'counts'
-            && get(roundPath(cycleId, roundId)).data.status == 'closed';
-          allow create: if isAdmin() && docId == 'counts' && isNewTally(cycleId, roundId);
-          allow update: if isMember() && docId == 'counts' && isValidVote(cycleId, roundId);
-        }
+      match /tally/{docId} {
+        allow get: if isMember() && docId == 'counts'
+          && !(get(cyclePath(cycleId)).data.status in ['nominating', 'voting']);
+        allow create: if isAdmin() && docId == 'counts' && isNewTally(cycleId);
+        allow update: if isMember() && docId == 'counts' && isValidVote(cycleId);
       }
     }
 
@@ -228,26 +223,24 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------ ballot writes
-    // Batch: receipts/{uid} (empty) + rounds/{n}.ballots (+1) + tally (+1 each)
+    // Batch: receipts/{uid} (empty) + cycles/{id}.ballots (+1) + tally
 
-    function isVotingNow(c, r) {
-      return !exists(receiptPath(c, r)) && existsAfter(receiptPath(c, r));
+    function isVotingNow(c) {
+      return !exists(receiptPath(c)) && existsAfter(receiptPath(c));
     }
 
-    function isNewReceipt(c, r) {
+    function isNewReceipt(c) {
       return request.resource.data.keys().size() == 0
-        && getAfter(roundPath(c, r)).data.ballots == get(roundPath(c, r)).data.ballots + 1;
+        && getAfter(cyclePath(c)).data.ballots == get(cyclePath(c)).data.ballots + 1;
     }
 
-    function countsOwnBallot(c, r) {
-      let cycle = get(cyclePath(c)).data;
-      return resource.data.status == 'open'
-        && cycle.status == 'voting'
-        && isBeforeDeadline(cycle.votingDeadline)
+    function countsOwnBallot(c) {
+      return resource.data.status == 'voting'
+        && isBeforeDeadline(resource.data.votingDeadline)
         && changesOnly(['ballots'])
         && request.resource.data.ballots == resource.data.ballots + 1
-        && isVotingNow(c, r)
-        && getAfter(tallyPath(c, r)).data.counts != get(tallyPath(c, r)).data.counts;
+        && isVotingNow(c)
+        && getAfter(tallyPath(c)).data != get(tallyPath(c)).data;
     }
 
     // The member's own nomination, or '' (never a valid option id).
@@ -255,13 +248,13 @@ service cloud.firestore {
       return exists(answerPath(c)) ? get(answerPath(c)).data.nominationId : '';
     }
 
-    function requiredChoices(round, own) {
-      let excluded = round.kind == 'first' && own in round.options ? 1 : 0;
-      let eligible = round.options.size() - excluded;
-      return eligible < round.votesPerMember ? eligible : round.votesPerMember;
+    // Two choices, or fewer when there are not enough eligible books.
+    function requiredChoices(options, own) {
+      let eligible = options.size() - (own in options ? 1 : 0);
+      return eligible < 2 ? eligible : 2;
     }
 
-    // Each option either keeps its count or gains exactly one vote.
+    // Each option either keeps its count or gains exactly one.
     function isStepAt(options, before, after, i) {
       return i >= options.size()
         || after[options[i]] == before[options[i]]
@@ -281,120 +274,42 @@ service cloud.firestore {
         && isStepAt(o, b, a, 27) && isStepAt(o, b, a, 28) && isStepAt(o, b, a, 29);
     }
 
-    function isValidVote(c, r) {
-      let round = get(roundPath(c, r)).data;
-      let before = resource.data.counts;
-      let after = request.resource.data.counts;
-      let diff = after.diff(before);
+    function isValidVote(c) {
+      let cycle = get(cyclePath(c)).data;
+      let before = resource.data;
+      let after = request.resource.data;
+      let votes = after.votes.diff(before.votes);
+      let firsts = after.firsts.diff(before.firsts);
       let own = ownNomination(c);
-      return round.status == 'open'
-        && hasExactly(request.resource.data, ['counts'])
-        && diff.addedKeys().size() == 0
-        && diff.removedKeys().size() == 0
-        && diff.changedKeys().size() == requiredChoices(round, own)
-        && (round.kind == 'runoff' || !diff.changedKeys().hasAny([own]))
-        && isStepOnly(round.options, before, after)
-        && isVotingNow(c, r);
-    }
-
-    // ------------------------------------------------------------- admin: rounds
-    // Batch: cycles/{id} (status/currentRound) + rounds/{n} + tally (all zero)
-
-    function hasDistinctOptions(options) {
-      return options is list && options.size() >= 1 && options.size() <= 30
-        && options.toSet().size() == options.size();
-    }
-
-    // `leaders` must be exactly the options tied at the top of `round`.
-    function isLeaderSlot(round, leaders, top, i) {
-      return i >= round.options.size()
-        || (round.options[i] in leaders
-          ? round.results[round.options[i]] == top
-          : round.results[round.options[i]] < top);
-    }
-
-    function areExactlyTheLeaders(round, leaders) {
-      let t = round.results[leaders[0]];
-      return isLeaderSlot(round, leaders, t, 0) && isLeaderSlot(round, leaders, t, 1)
-        && isLeaderSlot(round, leaders, t, 2) && isLeaderSlot(round, leaders, t, 3)
-        && isLeaderSlot(round, leaders, t, 4) && isLeaderSlot(round, leaders, t, 5)
-        && isLeaderSlot(round, leaders, t, 6) && isLeaderSlot(round, leaders, t, 7)
-        && isLeaderSlot(round, leaders, t, 8) && isLeaderSlot(round, leaders, t, 9)
-        && isLeaderSlot(round, leaders, t, 10) && isLeaderSlot(round, leaders, t, 11)
-        && isLeaderSlot(round, leaders, t, 12) && isLeaderSlot(round, leaders, t, 13)
-        && isLeaderSlot(round, leaders, t, 14) && isLeaderSlot(round, leaders, t, 15)
-        && isLeaderSlot(round, leaders, t, 16) && isLeaderSlot(round, leaders, t, 17)
-        && isLeaderSlot(round, leaders, t, 18) && isLeaderSlot(round, leaders, t, 19)
-        && isLeaderSlot(round, leaders, t, 20) && isLeaderSlot(round, leaders, t, 21)
-        && isLeaderSlot(round, leaders, t, 22) && isLeaderSlot(round, leaders, t, 23)
-        && isLeaderSlot(round, leaders, t, 24) && isLeaderSlot(round, leaders, t, 25)
-        && isLeaderSlot(round, leaders, t, 26) && isLeaderSlot(round, leaders, t, 27)
-        && isLeaderSlot(round, leaders, t, 28) && isLeaderSlot(round, leaders, t, 29);
-    }
-
-    function isFirstRound(round) {
-      return round.kind == 'first' && round.number == 1 && round.votesPerMember == 2;
-    }
-
-    function isRunoffAfter(c, round) {
-      let previous = get(roundPath(c, string(round.number - 1))).data;
-      return round.kind == 'runoff' && round.number > 1 && round.votesPerMember == 1
-        && previous.status == 'closed' && previous.results != null
-        && round.options.size() >= 2
-        && previous.options.hasAll(round.options)
-        && areExactlyTheLeaders(previous, round.options);
-    }
-
-    function isNewRound(c, r, round) {
-      let cycle = getAfter(cyclePath(c)).data;
-      return hasExactly(round, ['number', 'kind', 'options', 'votesPerMember', 'status',
-                                'ballots', 'openedAt', 'closedAt', 'results'])
-        && round.number is int && string(round.number) == r
-        && cycle.status == 'voting' && cycle.currentRound == round.number
-        && round.status == 'open' && round.ballots == 0 && round.openedAt == request.time
-        && round.closedAt == null && round.results == null
-        && hasDistinctOptions(round.options)
-        && round.options.size() <= cycle.responses
-        && existsAfter(tallyPath(c, r))
-        && (isFirstRound(round) || isRunoffAfter(c, round));
-    }
-
-    function isNewTally(c, r) {
-      let options = getAfter(roundPath(c, r)).data.options;
-      let counts = request.resource.data.counts;
-      return hasExactly(request.resource.data, ['counts'])
-        && counts is map
-        && counts.keys().hasAll(options) && counts.keys().hasOnly(options)
-        && counts.values().hasOnly([0]);
-    }
-
-    function closesRound(c, r) {
-      return resource.data.status == 'open'
-        && request.resource.data.status == 'closed'
-        && request.resource.data.closedAt == request.time
-        && changesOnly(['status', 'closedAt'])
-        && get(cyclePath(c)).data.currentRound == int(r);
-    }
-
-    function recordsResults(c, r) {
-      return resource.data.status == 'closed'
-        && resource.data.results == null
-        && changesOnly(['results'])
-        && request.resource.data.results == get(tallyPath(c, r)).data.counts;
+      return cycle.status == 'voting'
+        && hasExactly(after, ['votes', 'firsts'])
+        && votes.addedKeys().size() == 0 && votes.removedKeys().size() == 0
+        && firsts.addedKeys().size() == 0 && firsts.removedKeys().size() == 0
+        && votes.changedKeys().size() == requiredChoices(cycle.options, own)
+        && !votes.changedKeys().hasAny([own])
+        && isStepOnly(cycle.options, before.votes, after.votes)
+        // Exactly one first choice, and it is one of the books voted for.
+        && firsts.changedKeys().size() == 1
+        && firsts.changedKeys().difference(votes.changedKeys()).size() == 0
+        && isStepOnly(cycle.options, before.firsts, after.firsts)
+        && isVotingNow(c);
     }
 
     // ------------------------------------------------------------- admin: cycles
 
     function isNewCycle(cycle) {
-      return hasExactly(cycle, ['number', 'status', 'currentRound', 'responses',
-                                'nominationDeadline', 'votingDeadline', 'createdAt', 'winner',
+      return hasExactly(cycle, ['number', 'status', 'responses', 'nominationDeadline',
+                                'votingDeadline', 'createdAt', 'options', 'ballots',
+                                'votingOpenedAt', 'votingClosedAt', 'results', 'winner',
                                 'readingStartedAt', 'finishedAt'])
         && cycle.number is int && cycle.number >= 1
-        && cycle.status == 'nominating'
-        && cycle.currentRound == 0 && cycle.responses == 0
+        && cycle.status == 'nominating' && cycle.responses == 0
         && isOptionalTime(cycle.nominationDeadline) && cycle.votingDeadline == null
         && cycle.createdAt == request.time
-        && cycle.winner == null && cycle.readingStartedAt == null && cycle.finishedAt == null;
+        && cycle.options == [] && cycle.ballots == 0
+        && cycle.votingOpenedAt == null && cycle.votingClosedAt == null
+        && cycle.results == null && cycle.winner == null
+        && cycle.readingStartedAt == null && cycle.finishedAt == null;
     }
 
     function editsDeadline(before, after) {
@@ -404,79 +319,95 @@ service cloud.firestore {
           && isOptionalTime(after.votingDeadline));
     }
 
+    function hasDistinctOptions(options) {
+      return options is list && options.size() >= 1 && options.size() <= 30
+        && options.toSet().size() == options.size();
+    }
+
+    // Batch: cycles/{id} (to voting, with the ballot's options) + tally (all zero)
     function startsVoting(c, before, after) {
       return before.status == 'nominating' && after.status == 'voting'
-        && after.currentRound == 1
-        && changesOnly(['status', 'currentRound', 'votingDeadline'])
+        && changesOnly(['status', 'options', 'ballots', 'votingOpenedAt', 'votingDeadline'])
+        && hasDistinctOptions(after.options)
+        && after.options.size() <= before.responses
+        && after.ballots == 0
+        && after.votingOpenedAt == request.time
         && isOptionalTime(after.votingDeadline)
-        && existsAfter(roundPath(c, '1'));
+        && !exists(tallyPath(c)) && existsAfter(tallyPath(c));
     }
 
-    function opensRunoff(c, before, after) {
-      return before.status == 'voting' && after.status == 'voting'
-        && after.currentRound == before.currentRound + 1
-        && changesOnly(['currentRound', 'votingDeadline'])
-        && isOptionalTime(after.votingDeadline)
-        && existsAfter(roundPath(c, string(after.currentRound)));
+    function isZeroed(tally, options) {
+      return tally is map
+        && tally.keys().hasAll(options) && tally.keys().hasOnly(options)
+        && tally.values().hasOnly([0]);
     }
 
-    function entersTiebreak(c, before, after) {
-      let round = get(roundPath(c, string(before.currentRound))).data;
-      return before.status == 'voting' && after.status == 'tiebreak'
-        && changesOnly(['status'])
-        && round.kind == 'runoff' && round.status == 'closed' && round.results != null;
+    // Only together with the cycle opening its vote.
+    function isNewTally(c) {
+      let options = getAfter(cyclePath(c)).data.options;
+      let tally = request.resource.data;
+      return get(cyclePath(c)).data.status == 'nominating'
+        && getAfter(cyclePath(c)).data.status == 'voting'
+        && hasExactly(tally, ['votes', 'firsts'])
+        && isZeroed(tally.votes, options)
+        && isZeroed(tally.firsts, options);
     }
 
-    // The winner has more votes than every other option (strict),
-    // or at least as many (draw among the tied).
-    function beatsSlot(round, winner, strict, i) {
-      return i >= round.options.size() || round.options[i] == winner
-        || (strict
-          ? round.results[round.options[i]] < round.results[winner]
-          : round.results[round.options[i]] <= round.results[winner]);
+    function closesVoting(before, after) {
+      return before.status == 'voting' && after.status == 'tallying'
+        && changesOnly(['status', 'votingClosedAt'])
+        && after.votingClosedAt == request.time;
     }
 
-    function leads(round, w, strict) {
-      return beatsSlot(round, w, strict, 0) && beatsSlot(round, w, strict, 1)
-        && beatsSlot(round, w, strict, 2) && beatsSlot(round, w, strict, 3)
-        && beatsSlot(round, w, strict, 4) && beatsSlot(round, w, strict, 5)
-        && beatsSlot(round, w, strict, 6) && beatsSlot(round, w, strict, 7)
-        && beatsSlot(round, w, strict, 8) && beatsSlot(round, w, strict, 9)
-        && beatsSlot(round, w, strict, 10) && beatsSlot(round, w, strict, 11)
-        && beatsSlot(round, w, strict, 12) && beatsSlot(round, w, strict, 13)
-        && beatsSlot(round, w, strict, 14) && beatsSlot(round, w, strict, 15)
-        && beatsSlot(round, w, strict, 16) && beatsSlot(round, w, strict, 17)
-        && beatsSlot(round, w, strict, 18) && beatsSlot(round, w, strict, 19)
-        && beatsSlot(round, w, strict, 20) && beatsSlot(round, w, strict, 21)
-        && beatsSlot(round, w, strict, 22) && beatsSlot(round, w, strict, 23)
-        && beatsSlot(round, w, strict, 24) && beatsSlot(round, w, strict, 25)
-        && beatsSlot(round, w, strict, 26) && beatsSlot(round, w, strict, 27)
-        && beatsSlot(round, w, strict, 28) && beatsSlot(round, w, strict, 29);
+    // Does `w` beat option i? mode 0: more votes. mode 1: more votes, or as
+    // many with more first choices. mode 2: as in 1, or tied on both.
+    function beatsSlot(o, r, w, mode, i) {
+      return i >= o.size() || o[i] == w
+        || r.votes[o[i]] < r.votes[w]
+        || (mode > 0 && r.votes[o[i]] == r.votes[w]
+          && (r.firsts[o[i]] < r.firsts[w] || (mode == 2 && r.firsts[o[i]] == r.firsts[w])));
     }
 
-    function isEarnedWin(before, winner, round) {
-      return (winner.method == 'votes' && before.status == 'voting'
-          && leads(round, winner.nominationId, true))
-        || (winner.method == 'draw' && before.status == 'tiebreak'
-          && leads(round, winner.nominationId, false))
-        || (winner.method == 'unopposed' && before.status == 'voting'
-          && round.options.size() == 1);
+    function leads(o, r, w, m) {
+      return beatsSlot(o, r, w, m, 0) && beatsSlot(o, r, w, m, 1) && beatsSlot(o, r, w, m, 2)
+        && beatsSlot(o, r, w, m, 3) && beatsSlot(o, r, w, m, 4) && beatsSlot(o, r, w, m, 5)
+        && beatsSlot(o, r, w, m, 6) && beatsSlot(o, r, w, m, 7) && beatsSlot(o, r, w, m, 8)
+        && beatsSlot(o, r, w, m, 9) && beatsSlot(o, r, w, m, 10) && beatsSlot(o, r, w, m, 11)
+        && beatsSlot(o, r, w, m, 12) && beatsSlot(o, r, w, m, 13) && beatsSlot(o, r, w, m, 14)
+        && beatsSlot(o, r, w, m, 15) && beatsSlot(o, r, w, m, 16) && beatsSlot(o, r, w, m, 17)
+        && beatsSlot(o, r, w, m, 18) && beatsSlot(o, r, w, m, 19) && beatsSlot(o, r, w, m, 20)
+        && beatsSlot(o, r, w, m, 21) && beatsSlot(o, r, w, m, 22) && beatsSlot(o, r, w, m, 23)
+        && beatsSlot(o, r, w, m, 24) && beatsSlot(o, r, w, m, 25) && beatsSlot(o, r, w, m, 26)
+        && beatsSlot(o, r, w, m, 27) && beatsSlot(o, r, w, m, 28) && beatsSlot(o, r, w, m, 29);
     }
 
+    // The method must be the step that actually decided: a clear leader on
+    // votes cannot be labeled a first-choice or a draw win, and so on.
+    function isEarnedWin(options, results, winner) {
+      let w = winner.nominationId;
+      let m = winner.method;
+      return (m == 'unopposed' && options.size() == 1)
+        || (m == 'votes' && options.size() > 1 && leads(options, results, w, 0))
+        || (m == 'first-choices' && leads(options, results, w, 1)
+          && !leads(options, results, w, 0))
+        || (m == 'draw' && leads(options, results, w, 2)
+          && !leads(options, results, w, 1));
+    }
+
+    // Results must be the tally itself; the winner must follow the rule.
     function declaresWinner(c, before, after) {
       let winner = after.winner;
-      let round = get(roundPath(c, string(before.currentRound))).data;
-      return before.winner == null
-        && changesOnly(['status', 'winner', 'readingStartedAt'])
+      return before.status == 'tallying'
+        && changesOnly(['status', 'winner', 'results', 'readingStartedAt'])
         && ((after.status == 'reading' && after.readingStartedAt == request.time)
           || (after.status == 'upcoming' && after.readingStartedAt == null))
+        && after.results == get(tallyPath(c)).data
         && winner is map
         && hasExactly(winner, ['nominationId', 'book', 'method', 'decidedAt'])
         && winner.decidedAt == request.time
-        && round.status == 'closed' && round.results != null
-        && winner.nominationId in round.options
+        && winner.nominationId in before.options
         && winner.book == get(nominationPath(c, winner.nominationId)).data.book
-        && isEarnedWin(before, winner, round);
+        && isEarnedWin(before.options, after.results, winner);
     }
 
     function startsReading(before, after) {
@@ -494,8 +425,7 @@ service cloud.firestore {
     function isValidTransition(c, before, after) {
       return editsDeadline(before, after)
         || startsVoting(c, before, after)
-        || opensRunoff(c, before, after)
-        || entersTiebreak(c, before, after)
+        || closesVoting(before, after)
         || declaresWinner(c, before, after)
         || startsReading(before, after)
         || finishesReading(before, after);

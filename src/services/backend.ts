@@ -8,9 +8,8 @@ import type {
   NominationAnswer,
   NominationId,
   OwnAnswer,
-  Round,
-  RoundKind,
-  Tally,
+  RankedChoices,
+  VoteResults,
 } from '@/domain/types';
 
 /**
@@ -78,31 +77,25 @@ export interface AnswerInput {
 
 export interface BallotInput {
   cycleId: CycleId;
-  round: number;
   uid: MemberId;
-  choices: readonly NominationId[];
+  /** First choice, then second choice. */
+  choices: RankedChoices;
 }
 
 export interface ClubPort {
   watchCycles(subscriber: Subscriber<Cycle[]>): Unsubscribe;
   watchNominations(cycleId: CycleId, subscriber: Subscriber<Nomination[]>): Unsubscribe;
-  watchRounds(cycleId: CycleId, subscriber: Subscriber<Round[]>): Unsubscribe;
   watchOwnAnswer(
     cycleId: CycleId,
     uid: MemberId,
     subscriber: Subscriber<OwnAnswer | null>,
   ): Unsubscribe;
-  watchHasVoted(
-    cycleId: CycleId,
-    round: number,
-    uid: MemberId,
-    subscriber: Subscriber<boolean>,
-  ): Unsubscribe;
+  watchHasVoted(cycleId: CycleId, uid: MemberId, subscriber: Subscriber<boolean>): Unsubscribe;
   watchMembers(subscriber: Subscriber<MemberProfile[]>): Unsubscribe;
   saveProfile(profile: MemberProfile): Promise<void>;
   /** Final: a member answers once per cycle. Returns the nomination id, if any. */
   answerNominationCall(input: AnswerInput): Promise<NominationId | null>;
-  /** Final and anonymous: a member votes once per round. */
+  /** Final and anonymous: a member votes once per cycle. */
   castBallot(input: BallotInput): Promise<void>;
 }
 
@@ -113,10 +106,8 @@ export interface OpenCycleInput {
   nominationDeadline: Date | null;
 }
 
-export interface OpenRoundInput {
+export interface StartVotingInput {
   cycleId: CycleId;
-  number: number;
-  kind: RoundKind;
   options: readonly NominationId[];
   votingDeadline: Date | null;
 }
@@ -126,6 +117,8 @@ export interface DeclareWinnerInput {
   nominationId: NominationId;
   book: Book;
   method: DecisionMethod;
+  /** The tally exactly as read, kept on the cycle for history. */
+  results: VoteResults;
   startReading: boolean;
 }
 
@@ -140,11 +133,11 @@ export interface AdminPort {
   openCycle(input: OpenCycleInput): Promise<CycleId>;
   setDeadline(cycleId: CycleId, field: DeadlineField, deadline: Date | null): Promise<void>;
   deleteCycle(cycleId: CycleId): Promise<void>;
-  openRound(input: OpenRoundInput): Promise<void>;
-  closeRound(cycleId: CycleId, round: number): Promise<void>;
-  /** Copies the tally into the closed round and returns it. */
-  recordResults(cycleId: CycleId, round: number): Promise<Tally>;
-  enterTiebreak(cycleId: CycleId): Promise<void>;
+  /** Fixes the ballot's options and opens an empty tally. */
+  startVoting(input: StartVotingInput): Promise<void>;
+  closeVoting(cycleId: CycleId): Promise<void>;
+  /** Reads the tally, readable only once voting has closed. */
+  readResults(cycleId: CycleId): Promise<VoteResults>;
   declareWinner(input: DeclareWinnerInput): Promise<void>;
   startReading(cycleId: CycleId): Promise<void>;
   finishReading(cycleId: CycleId): Promise<void>;

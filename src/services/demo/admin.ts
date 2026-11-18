@@ -1,11 +1,10 @@
-import { emptyTally } from '@/domain/tally';
-import type { Cycle, CycleId, CycleStatus, Round } from '@/domain/types';
-import { rulesFor } from '@/domain/voting';
+import { emptyResults } from '@/domain/tally';
+import type { Cycle, CycleId, CycleStatus, VoteResults } from '@/domain/types';
 
-import type { AdminPort, OpenRoundInput } from '../backend';
+import type { AdminPort } from '../backend';
 
 import { deny, pause, requireAdmin, type DemoContext } from './context';
-import { roundKey, type DemoState } from './state';
+import type { DemoState } from './state';
 
 type AsAdmin = (change: (state: DemoState) => void) => Promise<void>;
 
@@ -15,37 +14,23 @@ function cycleIn(state: DemoState, cycleId: CycleId, allowed: CycleStatus[]): Cy
   return cycle;
 }
 
-function roundIn(state: DemoState, cycleId: CycleId, number: number): Round {
-  return state.rounds[cycleId]?.find((round) => round.number === number) ?? deny();
-}
-
 function newCycle(id: CycleId, number: number, nominationDeadline: Date | null): Cycle {
   return {
     id,
     number,
     status: 'nominating',
-    currentRound: 0,
     responses: 0,
     nominationDeadline,
     votingDeadline: null,
     createdAt: new Date(),
+    options: [],
+    ballots: 0,
+    votingOpenedAt: null,
+    votingClosedAt: null,
+    results: null,
     winner: null,
     readingStartedAt: null,
     finishedAt: null,
-  };
-}
-
-function newRound(input: OpenRoundInput): Round {
-  return {
-    number: input.number,
-    kind: input.kind,
-    options: [...input.options],
-    votesPerMember: rulesFor(input.kind).votesPerMember,
-    status: 'open',
-    ballots: 0,
-    openedAt: new Date(),
-    closedAt: null,
-    results: null,
   };
 }
 
@@ -73,15 +58,12 @@ function cycleActions(asAdmin: AsAdmin) {
         delete state.cycles[cycleId];
       }),
 
-    enterTiebreak: (cycleId) =>
+    declareWinner: ({ cycleId, nominationId, book, method, results, startReading }) =>
       asAdmin((state) => {
-        cycleIn(state, cycleId, ['voting']).status = 'tiebreak';
-      }),
-
-    declareWinner: ({ cycleId, nominationId, book, method, startReading }) =>
-      asAdmin((state) => {
-        const cycle = cycleIn(state, cycleId, ['voting', 'tiebreak']);
+        const cycle = cycleIn(state, cycleId, ['tallying']);
+        if (!cycle.options.includes(nominationId)) deny();
         cycle.winner = { nominationId, book, method, decidedAt: new Date() };
+        cycle.results = results;
         cycle.status = startReading ? 'reading' : 'upcoming';
         cycle.readingStartedAt = startReading ? new Date() : null;
       }),
@@ -102,36 +84,34 @@ function cycleActions(asAdmin: AsAdmin) {
   } satisfies Partial<AdminPort>;
 }
 
-function roundActions(asAdmin: AsAdmin) {
+function votingActions(asAdmin: AsAdmin) {
   return {
-    openRound: (input) =>
+    startVoting: ({ cycleId, options, votingDeadline }) =>
       asAdmin((state) => {
-        const allowed: CycleStatus[] = input.kind === 'first' ? ['nominating'] : ['voting'];
-        const cycle = cycleIn(state, input.cycleId, allowed);
+        const cycle = cycleIn(state, cycleId, ['nominating']);
+        if (options.length === 0) deny();
         cycle.status = 'voting';
-        cycle.currentRound = input.number;
-        cycle.votingDeadline = input.votingDeadline;
-        state.rounds[input.cycleId] = [...(state.rounds[input.cycleId] ?? []), newRound(input)];
-        state.tallies[roundKey(input.cycleId, input.number)] = { ...emptyTally(input.options) };
+        cycle.options = [...options];
+        cycle.ballots = 0;
+        cycle.votingOpenedAt = new Date();
+        cycle.votingDeadline = votingDeadline;
+        state.tallies[cycleId] = emptyResults(options);
       }),
 
-    closeRound: (cycleId, number) =>
+    closeVoting: (cycleId) =>
       asAdmin((state) => {
-        const round = roundIn(state, cycleId, number);
-        if (round.status !== 'open') deny();
-        round.status = 'closed';
-        round.closedAt = new Date();
+        const cycle = cycleIn(state, cycleId, ['voting']);
+        cycle.status = 'tallying';
+        cycle.votingClosedAt = new Date();
       }),
 
-    recordResults: async (cycleId, number) => {
-      let results = {};
+    readResults: async (cycleId) => {
+      let results: VoteResults | undefined;
       await asAdmin((state) => {
-        const round = roundIn(state, cycleId, number);
-        if (round.status !== 'closed') deny();
-        results = { ...state.tallies[roundKey(cycleId, number)] };
-        round.results = results;
+        cycleIn(state, cycleId, ['tallying', 'upcoming', 'reading', 'finished']);
+        results = state.tallies[cycleId];
       });
-      return results;
+      return results ?? deny();
     },
   } satisfies Partial<AdminPort>;
 }
@@ -174,7 +154,7 @@ export function createDemoAdmin(context: DemoContext): AdminPort {
   };
   return {
     ...cycleActions(asAdmin),
-    ...roundActions(asAdmin),
+    ...votingActions(asAdmin),
     ...allowlistActions(context, asAdmin),
   };
 }

@@ -24,11 +24,7 @@ export const refs = {
   answer: (db: Firestore, cycleId: CycleId, uid: MemberId) =>
     doc(db, 'cycles', cycleId, 'answers', uid),
 
-  rounds: (db: Firestore, cycleId: CycleId) => collection(db, 'cycles', cycleId, 'rounds'),
-  round: (db: Firestore, cycleId: CycleId, round: number) =>
-    doc(db, 'cycles', cycleId, 'rounds', String(round)),
-  tally: (db: Firestore, cycleId: CycleId, round: number) =>
-    doc(db, 'cycles', cycleId, 'rounds', String(round), 'tally', 'counts'),
-  receipt: (db: Firestore, cycleId: CycleId, round: number, uid: MemberId) =>
-    doc(db, 'cycles', cycleId, 'rounds', String(round), 'receipts', uid),
+  tally: (db: Firestore, cycleId: CycleId) => doc(db, 'cycles', cycleId, 'tally', 'counts'),
+  receipt: (db: Firestore, cycleId: CycleId, uid: MemberId) =>
+    doc(db, 'cycles', cycleId, 'receipts', uid),
 };

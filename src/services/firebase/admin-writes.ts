@@ -9,10 +9,10 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 
-import { emptyTally } from '@/domain/tally';
-import type { Book, CycleId, DecisionMethod, NominationId, RoundKind, Tally } from '@/domain/types';
-import { rulesFor } from '@/domain/voting';
+import { emptyResults } from '@/domain/tally';
+import type { Book, CycleId, DecisionMethod, NominationId, VoteResults } from '@/domain/types';
 
+import { toResults } from './converters';
 import { refs } from './refs';
 
 /**
@@ -30,11 +30,15 @@ export async function openCycle(db: Firestore, input: OpenCycleInput): Promise<C
   await setDoc(cycle, {
     number: input.number,
     status: 'nominating',
-    currentRound: 0,
     responses: 0,
     nominationDeadline: input.nominationDeadline,
     votingDeadline: null,
     createdAt: serverTimestamp(),
+    options: [],
+    ballots: 0,
+    votingOpenedAt: null,
+    votingClosedAt: null,
+    results: null,
     winner: null,
     readingStartedAt: null,
     finishedAt: null,
@@ -58,65 +62,40 @@ export async function deleteCycle(db: Firestore, cycleId: CycleId) {
   await deleteDoc(refs.cycle(db, cycleId));
 }
 
-interface OpenRoundInput {
+interface StartVotingInput {
   cycleId: CycleId;
-  number: number;
-  kind: RoundKind;
   options: readonly NominationId[];
   votingDeadline: Date | null;
 }
 
-/** Opens round 1 (moving the cycle to voting) or a runoff. */
-export async function openRound(db: Firestore, input: OpenRoundInput) {
-  const { cycleId, number, kind, options, votingDeadline } = input;
-  const cycleChanges =
-    kind === 'first'
-      ? { status: 'voting', currentRound: number, votingDeadline }
-      : { currentRound: number, votingDeadline };
-
+/** Fixes the ballot's options and opens an empty tally, in one batch. */
+export async function startVoting(db: Firestore, input: StartVotingInput) {
+  const { cycleId, options, votingDeadline } = input;
   const batch = writeBatch(db);
-  batch.update(refs.cycle(db, cycleId), cycleChanges);
-  batch.set(refs.round(db, cycleId, number), {
-    number,
-    kind,
+  batch.update(refs.cycle(db, cycleId), {
+    status: 'voting',
     options: [...options],
-    votesPerMember: rulesFor(kind).votesPerMember,
-    status: 'open',
     ballots: 0,
-    openedAt: serverTimestamp(),
-    closedAt: null,
-    results: null,
+    votingOpenedAt: serverTimestamp(),
+    votingDeadline,
   });
-  batch.set(refs.tally(db, cycleId, number), { counts: emptyTally(options) });
+  batch.set(refs.tally(db, cycleId), emptyResults(options));
   await batch.commit();
 }
 
-export async function closeRound(db: Firestore, cycleId: CycleId, round: number) {
-  await updateDoc(refs.round(db, cycleId, round), {
-    status: 'closed',
-    closedAt: serverTimestamp(),
+export async function closeVoting(db: Firestore, cycleId: CycleId) {
+  await updateDoc(refs.cycle(db, cycleId), {
+    status: 'tallying',
+    votingClosedAt: serverTimestamp(),
   });
 }
 
-function parseCounts(value: unknown): Tally {
-  if (typeof value !== 'object' || value === null) throw new Error('Apuração ilegível.');
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (entries.some(([, votes]) => typeof votes !== 'number')) {
-    throw new Error('Apuração ilegível.');
-  }
-  return Object.fromEntries(entries) as Tally;
-}
-
-/** Copies the (now readable) tally into the closed round, for history. */
-export async function recordResults(db: Firestore, cycleId: CycleId, round: number) {
-  const snapshot = await getDoc(refs.tally(db, cycleId, round));
-  const results = parseCounts(snapshot.get('counts'));
-  await updateDoc(refs.round(db, cycleId, round), { results });
+/** The tally becomes readable once voting has closed. */
+export async function readResults(db: Firestore, cycleId: CycleId): Promise<VoteResults> {
+  const snapshot = await getDoc(refs.tally(db, cycleId));
+  const results = toResults(snapshot.data());
+  if (!results) throw new Error('Apuração ilegível.');
   return results;
-}
-
-export async function enterTiebreak(db: Firestore, cycleId: CycleId) {
-  await updateDoc(refs.cycle(db, cycleId), { status: 'tiebreak' });
 }
 
 interface DeclareWinnerInput {
@@ -125,14 +104,17 @@ interface DeclareWinnerInput {
   /** Must be the nomination's book exactly as stored. */
   book: Book;
   method: DecisionMethod;
+  /** Must be the tally exactly as stored. */
+  results: VoteResults;
   startReading: boolean;
 }
 
 export async function declareWinner(db: Firestore, input: DeclareWinnerInput) {
-  const { cycleId, nominationId, book, method, startReading } = input;
+  const { cycleId, nominationId, book, method, results, startReading } = input;
   await updateDoc(refs.cycle(db, cycleId), {
     status: startReading ? 'reading' : 'upcoming',
     winner: { nominationId, book, method, decidedAt: serverTimestamp() },
+    results,
     readingStartedAt: startReading ? serverTimestamp() : null,
   });
 }

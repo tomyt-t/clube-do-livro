@@ -1,4 +1,4 @@
-import type { Book, Cycle, Round } from '@/domain/types';
+import type { Book, Cycle } from '@/domain/types';
 
 export function makeBook(overrides: Partial<Book> = {}): Book {
   return {
@@ -14,29 +14,18 @@ export function makeCycle(overrides: Partial<Cycle> = {}): Cycle {
     id: `cycle-${String(overrides.number ?? 1)}`,
     number: 1,
     status: 'nominating',
-    currentRound: 0,
     responses: 0,
     nominationDeadline: null,
     votingDeadline: null,
     createdAt: new Date('2026-01-01T12:00:00Z'),
+    options: [],
+    ballots: 0,
+    votingOpenedAt: null,
+    votingClosedAt: null,
+    results: null,
     winner: null,
     readingStartedAt: null,
     finishedAt: null,
-    ...overrides,
-  };
-}
-
-export function makeRound(overrides: Partial<Round> = {}): Round {
-  return {
-    number: 1,
-    kind: 'first',
-    options: ['a', 'b', 'c'],
-    votesPerMember: 2,
-    status: 'open',
-    ballots: 0,
-    openedAt: new Date('2026-01-02T12:00:00Z'),
-    closedAt: null,
-    results: null,
     ...overrides,
   };
 }
