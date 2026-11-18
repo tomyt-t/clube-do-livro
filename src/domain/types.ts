@@ -7,19 +7,17 @@ export type MemberId = string;
 export type CycleId = string;
 export type NominationId = string;
 
+/**
+ * Anything the club reads: a novel, a manga volume, a comic, an essay...
+ * Described in free text; nothing checks it against a catalog.
+ */
 export interface Book {
-  /** Catalog title, or exactly what the member typed when no match was used. */
+  /** Free text from the "Título / autor" field, e.g. "Berserk, Kentaro Miura". */
   title: string;
-  /** Empty when the book was not matched in a catalog. */
-  authors: string[];
-  /** Catalog description; empty when unavailable. */
-  synopsis: string;
   /** Optional link to a synopsis, pasted by the member. */
   synopsisUrl: string | null;
-  /** An https catalog image or a small uploaded image (`data:image/...`). */
+  /** An https image suggested by a catalog, or a small uploaded image (`data:image/...`). */
   coverUrl: string | null;
-  publishedYear: number | null;
-  pageCount: number | null;
 }
 
 export type CycleStatus =

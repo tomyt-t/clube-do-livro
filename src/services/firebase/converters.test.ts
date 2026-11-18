@@ -47,17 +47,13 @@ describe('toBook', () => {
   it('fills safe defaults for missing optional fields', () => {
     expect(toBook({ title: 'Torto Arado' })).toEqual({
       title: 'Torto Arado',
-      authors: [],
-      synopsis: '',
       synopsisUrl: null,
       coverUrl: null,
-      publishedYear: null,
-      pageCount: null,
     });
   });
 
   it('rejects books without a title', () => {
-    expect(toBook({ authors: ['X'] })).toBeNull();
+    expect(toBook({ coverUrl: 'https://example.com/capa.jpg' })).toBeNull();
     expect(toNomination('n1', { book: 'nope' })).toBeNull();
   });
 });

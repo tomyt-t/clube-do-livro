@@ -99,33 +99,14 @@ service cloud.firestore {
       return value == null || value is timestamp;
     }
 
-    function isOptionalInt(value, max) {
-      return value == null || (value is int && value >= 0 && value <= max);
-    }
-
-    function isAuthorAt(authors, i) {
-      return i >= authors.size() || isText(authors[i], 1, 120);
-    }
-
-    function isAuthorList(authors) {
-      return authors is list && authors.size() <= 10
-        && isAuthorAt(authors, 0) && isAuthorAt(authors, 1) && isAuthorAt(authors, 2)
-        && isAuthorAt(authors, 3) && isAuthorAt(authors, 4) && isAuthorAt(authors, 5)
-        && isAuthorAt(authors, 6) && isAuthorAt(authors, 7) && isAuthorAt(authors, 8)
-        && isAuthorAt(authors, 9);
-    }
-
+    // Any kind of reading, described in free text: only sizes and link
+    // formats are checked.
     function isBook(book) {
       return book is map
-        && hasExactly(book, ['title', 'authors', 'synopsis', 'synopsisUrl', 'coverUrl',
-                             'publishedYear', 'pageCount'])
+        && hasExactly(book, ['title', 'synopsisUrl', 'coverUrl'])
         && isText(book.title, 1, 200)
-        && isAuthorList(book.authors)
-        && isText(book.synopsis, 0, 4000)
         && (book.synopsisUrl == null || isLink(book.synopsisUrl))
-        && (book.coverUrl == null || isLink(book.coverUrl) || isUploadedCover(book.coverUrl))
-        && isOptionalInt(book.publishedYear, 3000)
-        && isOptionalInt(book.pageCount, 100000);
+        && (book.coverUrl == null || isLink(book.coverUrl) || isUploadedCover(book.coverUrl));
     }
 
     function isBeforeDeadline(deadline) {

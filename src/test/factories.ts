@@ -2,13 +2,9 @@ import type { Book, Cycle, Round } from '@/domain/types';
 
 export function makeBook(overrides: Partial<Book> = {}): Book {
   return {
-    title: 'Torto Arado',
-    authors: ['Itamar Vieira Junior'],
-    synopsis: 'Duas irmãs no sertão baiano.',
+    title: 'Torto Arado, Itamar Vieira Junior',
     synopsisUrl: 'https://example.com/torto-arado',
     coverUrl: 'https://covers.openlibrary.org/b/id/12369648-L.jpg',
-    publishedYear: 2019,
-    pageCount: 264,
     ...overrides,
   };
 }

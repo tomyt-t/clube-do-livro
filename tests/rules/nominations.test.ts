@@ -203,9 +203,9 @@ describe('book validation', () => {
     ['a non-https synopsis link', { synopsisUrl: 'http://example.com/sinopse' }],
     ['a script link as cover', { coverUrl: 'javascript:alert(1)' }],
     ['an SVG upload', { coverUrl: 'data:image/svg+xml;base64,PHN2Zz4=' }],
-    ['a huge synopsis', { synopsis: 'x'.repeat(4001) }],
-    ['too many authors', { authors: Array.from({ length: 11 }, () => 'Autor') }],
-    ['a text page count', { pageCount: '300' }],
+    ['an oversized upload', { coverUrl: `data:image/jpeg;base64,${'A'.repeat(200_001)}` }],
+    ['a title over 200 characters', { title: 'x'.repeat(201) }],
+    ['a title that is not text', { title: 42 }],
   ])('rejects %s', async (_case, change) => {
     await assertFails(rawNominate(dbAs(env, ana), ana.uid, { ...valid, ...change }));
   });

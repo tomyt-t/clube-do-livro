@@ -2,17 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import { makeBook } from '@/test/factories';
 
-import { BOOK_LIMITS, formatAuthors, isUploadedCover, normalizeBook, validateBook } from './book';
+import { BOOK_LIMITS, isUploadedCover, normalizeBook, validateBook } from './book';
 
 const TINY_JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2w==';
 
 describe('normalizeBook', () => {
-  it('collapses whitespace and drops empty authors', () => {
-    const book = normalizeBook(
-      makeBook({ title: '  Dom   Casmurro ', authors: [' Machado ', ' '] }),
+  it('collapses whitespace in the title', () => {
+    expect(normalizeBook(makeBook({ title: '  Berserk,   Kentaro  Miura ' })).title).toBe(
+      'Berserk, Kentaro Miura',
     );
-    expect(book.title).toBe('Dom Casmurro');
-    expect(book.authors).toEqual(['Machado']);
   });
 
   it('turns blank links into missing links', () => {
@@ -20,34 +18,25 @@ describe('normalizeBook', () => {
     expect(book.coverUrl).toBeNull();
     expect(book.synopsisUrl).toBeNull();
   });
-
-  it('keeps paragraph breaks but limits blank lines', () => {
-    const book = normalizeBook(makeBook({ synopsis: 'Um.\r\n\r\n\r\n\r\nDois.  ' }));
-    expect(book.synopsis).toBe('Um.\n\nDois.');
-  });
 });
 
 describe('validateBook', () => {
-  it('accepts a complete book', () => {
-    expect(validateBook(makeBook())).toEqual([]);
+  it('accepts any reading described in free text', () => {
+    expect(validateBook(makeBook({ title: 'Watchmen (Alan Moore)' }))).toEqual([]);
+    expect(validateBook(makeBook({ title: 'Berserk vol. 1' }))).toEqual([]);
   });
 
-  it('accepts a book with only the typed title', () => {
-    const typed = makeBook({ authors: [], synopsis: '', synopsisUrl: null, coverUrl: null });
-    expect(validateBook(typed)).toEqual([]);
+  it('accepts a title alone, without cover or link', () => {
+    expect(validateBook({ title: 'Um livro qualquer', synopsisUrl: null, coverUrl: null })).toEqual(
+      [],
+    );
   });
 
-  it('requires a title', () => {
-    expect(validateBook(makeBook({ title: '' }))).toContain('title-missing');
-  });
-
-  it('enforces the length limits', () => {
-    const book = makeBook({
-      title: 'x'.repeat(BOOK_LIMITS.title + 1),
-      synopsis: 'x'.repeat(BOOK_LIMITS.synopsis + 1),
-      authors: Array.from({ length: BOOK_LIMITS.authors + 1 }, () => 'Autor'),
-    });
-    expect(validateBook(book)).toEqual(['title-too-long', 'synopsis-too-long', 'too-many-authors']);
+  it('requires a title within the limit', () => {
+    expect(validateBook(makeBook({ title: '' }))).toEqual(['title-missing']);
+    expect(validateBook(makeBook({ title: 'x'.repeat(BOOK_LIMITS.title + 1) }))).toEqual([
+      'title-too-long',
+    ]);
   });
 
   it.each(['http://example.com/sinopse', 'javascript:alert(1)', 'sinopse'])(
@@ -81,11 +70,5 @@ describe('isUploadedCover', () => {
   it('rejects images over the size limit', () => {
     const huge = `data:image/jpeg;base64,${'A'.repeat(BOOK_LIMITS.uploadedCover)}`;
     expect(isUploadedCover(huge)).toBe(false);
-  });
-});
-
-describe('formatAuthors', () => {
-  it('joins names the Portuguese way', () => {
-    expect(formatAuthors(['Ana', 'Bia', 'Caio'])).toBe('Ana, Bia e Caio');
   });
 });

@@ -26,12 +26,8 @@ export function toBookData(book: Book): Book {
   const clean = normalizeBook(book);
   const data: Book = {
     title: clean.title,
-    authors: clean.authors,
-    synopsis: clean.synopsis,
     synopsisUrl: encodeLink(clean.synopsisUrl),
     coverUrl: encodeLink(clean.coverUrl),
-    publishedYear: clean.publishedYear,
-    pageCount: clean.pageCount,
   };
   const errors = validateBook(data);
   if (errors.length > 0) throw new InvalidBookError(errors);

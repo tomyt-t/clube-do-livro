@@ -53,10 +53,6 @@ function count(value: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
-function countOrNull(value: unknown): number | null {
-  return typeof value === 'number' && Number.isInteger(value) ? value : null;
-}
-
 function dateOrNull(value: unknown): Date | null {
   return value instanceof Timestamp ? value.toDate() : null;
 }
@@ -74,12 +70,8 @@ export function toBook(value: unknown): Book | null {
   if (!isRecord(value) || text(value.title) === '') return null;
   return {
     title: text(value.title),
-    authors: textList(value.authors),
-    synopsis: text(value.synopsis),
     synopsisUrl: textOrNull(value.synopsisUrl),
     coverUrl: textOrNull(value.coverUrl),
-    publishedYear: countOrNull(value.publishedYear),
-    pageCount: countOrNull(value.pageCount),
   };
 }
 
