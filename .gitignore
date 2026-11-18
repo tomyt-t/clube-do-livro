@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment (Firebase config lives here locally and in GitHub Actions variables)
+.env.local
+.env.*.local
+
+# Firebase emulator
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Test output
+coverage/
+
+# Editors and OS
+.idea/
+.DS_Store
+Thumbs.db
+*.log
