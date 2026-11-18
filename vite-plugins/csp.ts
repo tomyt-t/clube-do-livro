@@ -32,6 +32,8 @@ const POLICY: Record<string, string[]> = {
     'https://*.googleapis.com',
     'https://openlibrary.org',
     'https://graphql.anilist.co',
+    // Article summaries, read only from Wikipedia links members paste.
+    'https://*.wikipedia.org',
   ],
   'frame-src': [
     'https://*.firebaseapp.com',

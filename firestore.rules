@@ -101,10 +101,18 @@ service cloud.firestore {
 
     // Any kind of reading, described in free text: only sizes and link
     // formats are checked.
+    function isSynopsis(book) {
+      return (book.synopsis == null && book.synopsisSource == null)
+        || (isText(book.synopsis, 1, 2000)
+          && (book.synopsisSource == null
+            || book.synopsisSource in ['wikipedia', 'open-library', 'google-books', 'anilist']));
+    }
+
     function isBook(book) {
       return book is map
-        && hasExactly(book, ['title', 'synopsisUrl', 'coverUrl'])
+        && hasExactly(book, ['title', 'synopsis', 'synopsisSource', 'synopsisUrl', 'coverUrl'])
         && isText(book.title, 1, 200)
+        && isSynopsis(book)
         && (book.synopsisUrl == null || isLink(book.synopsisUrl))
         && (book.coverUrl == null || isLink(book.coverUrl) || isUploadedCover(book.coverUrl));
     }

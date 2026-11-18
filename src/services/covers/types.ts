@@ -10,6 +10,10 @@ export interface CoverOption {
   /** Author, format and year, to tell editions apart. */
   details: string;
   source: CoverSource;
+  /** The synopsis as the catalog sent it with the search (HTML or Markdown), if any. */
+  synopsis: string | null;
+  /** Open Library keeps synopses on the work page, fetched only if this cover is picked. */
+  workKey: string | null;
 }
 
 export type Fetcher = typeof fetch;

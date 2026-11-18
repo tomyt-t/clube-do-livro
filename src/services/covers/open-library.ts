@@ -24,6 +24,8 @@ function toOption(doc: unknown): CoverOption | null {
     title,
     details: joinDetails([author, year]),
     source: 'open-library',
+    synopsis: null,
+    workKey: textAt(doc, 'key'),
   };
 }
 

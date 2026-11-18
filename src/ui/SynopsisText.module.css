@@ -1,0 +1,7 @@
+.synopsis {
+  display: grid;
+  gap: var(--space-3);
+  max-inline-size: 38rem;
+  line-height: 1.6;
+  white-space: pre-line;
+}

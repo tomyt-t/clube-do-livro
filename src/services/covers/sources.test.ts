@@ -15,6 +15,7 @@ describe('Open Library', () => {
     const json = {
       docs: [
         {
+          key: '/works/OL1W',
           title: 'Torto Arado',
           author_name: ['Itamar Vieira Junior'],
           first_publish_year: 2019,
@@ -30,6 +31,8 @@ describe('Open Library', () => {
         title: 'Torto Arado',
         details: 'Itamar Vieira Junior · 2019',
         source: 'open-library',
+        synopsis: null,
+        workKey: '/works/OL1W',
       },
     ]);
   });
@@ -65,6 +68,7 @@ describe('Google Books', () => {
             title: 'Watchmen',
             authors: ['Alan Moore'],
             publishedDate: '1987-09-01',
+            description: '<p>Quem vigia os vigilantes?</p>',
             imageLinks: { thumbnail: 'http://books.google.com/books/content?id=abc' },
           },
         },
@@ -78,6 +82,7 @@ describe('Google Books', () => {
       title: 'Watchmen',
       details: 'Alan Moore · 1987',
       source: 'google-books',
+      synopsis: '<p>Quem vigia os vigilantes?</p>',
     });
   });
 });
@@ -98,6 +103,7 @@ describe('AniList', () => {
               id: 30002,
               format: 'MANGA',
               title: { romaji: 'Berserk', english: 'Berserk' },
+              description: 'Guts, the Black Swordsman.<br><br>(Source: Dark Horse)',
               coverImage: {
                 extraLarge: 'https://s4.anilist.co/large.jpg',
                 large: 'https://s4.anilist.co/medium.jpg',
@@ -117,6 +123,8 @@ describe('AniList', () => {
         title: 'Berserk',
         details: 'Kentarou Miura · Mangá · 1989',
         source: 'anilist',
+        synopsis: 'Guts, the Black Swordsman.<br><br>(Source: Dark Horse)',
+        workKey: null,
       },
     ]);
   });

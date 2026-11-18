@@ -1,0 +1,28 @@
+.synopsis {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  margin-block-start: 1.625rem;
+}
+
+/* About six lines, fading out so it reads as "there is more". */
+.folded {
+  max-block-size: 9.6em;
+  overflow: hidden;
+  mask-image: linear-gradient(#000 60%, transparent);
+}
+
+.toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.credit {
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+}

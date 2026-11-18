@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { Cycle } from '@/domain/types';
 import { openNominations, startVoting } from '@/services/election';
 import { answerAs, electionContext, emptyClub, firstValue, voteAs } from '@/test/backend';
+import { makeBook } from '@/test/factories';
 import { renderAsMember } from '@/test/render';
 
 import { ReadingPage } from './ReadingPage';
@@ -27,10 +28,43 @@ describe('ReadingPage', () => {
     expect(screen.getByText('no sorteio')).toBeInTheDocument();
     expect(screen.getByText('3 leituras')).toBeInTheDocument();
 
-    const synopsis = screen.getByRole('link', { name: /Ler sinopse/ });
-    expect(synopsis).toHaveAttribute('href', expect.stringContaining('pt.wikipedia.org'));
-    expect(synopsis).toHaveAttribute('target', '_blank');
-    expect(synopsis).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.getByText(/Sete gerações da família Buendía/)).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: /Abrir o link/ });
+    expect(link).toHaveAttribute('href', expect.stringContaining('pt.wikipedia.org'));
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('folds a long synopsis and credits where it came from', async () => {
+    const backend = emptyClub();
+    const cycleId = await openNominations(backend.admin, [], null);
+    const synopsis = `${'Uma frase da sinopse. '.repeat(30)}Fim.`;
+    await answerAs(backend, cycleId, 'rafa', makeBook({ synopsis, synopsisSource: 'wikipedia' }));
+    await startVoting(backend.admin, await electionContext(backend, cycleId), null);
+
+    const { user } = renderAsMember(<ReadingPage />, 'marina', { backend });
+    const more = await screen.findByRole('button', { name: 'Ler mais' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('Sinopse: Wikipédia.')).toBeInTheDocument();
+
+    await user.click(more);
+    expect(screen.getByRole('button', { name: 'Mostrar menos' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+  });
+
+  it('offers the link as a button when there is no synopsis text', async () => {
+    const backend = emptyClub();
+    const cycleId = await openNominations(backend.admin, [], null);
+    await answerAs(backend, cycleId, 'rafa', makeBook({ synopsis: null }));
+    await startVoting(backend.admin, await electionContext(backend, cycleId), null);
+
+    renderAsMember(<ReadingPage />, 'marina', { backend });
+    expect(await screen.findByRole('link', { name: /Ler sinopse/ })).toHaveAttribute(
+      'href',
+      'https://example.com/torto-arado',
+    );
   });
 
   it('invites members to nominate while nominations are open', async () => {

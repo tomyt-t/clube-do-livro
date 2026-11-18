@@ -1,8 +1,9 @@
-import type { Book } from './types';
+import type { Book, SynopsisSource } from './types';
 
 /** Field limits. `firestore.rules` enforces the same numbers server-side. */
 export const BOOK_LIMITS = {
   title: 200,
+  synopsis: 2000,
   link: 1000,
   /** Characters of an uploaded cover's data URL (≈150 KB of image). */
   uploadedCover: 200_000,
@@ -15,17 +16,42 @@ const UPLOADED_COVER = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/
  * so there is no "is this a real book" check.
  */
 export type BookError =
-  'title-missing' | 'title-too-long' | 'synopsis-link-invalid' | 'cover-invalid';
+  | 'title-missing'
+  | 'title-too-long'
+  | 'synopsis-too-long'
+  | 'synopsis-source-invalid'
+  | 'synopsis-link-invalid'
+  | 'cover-invalid';
+
+export const SYNOPSIS_SOURCES: readonly SynopsisSource[] = [
+  'wikipedia',
+  'open-library',
+  'google-books',
+  'anilist',
+];
 
 function nullIfBlank(value: string | null): string | null {
   const trimmed = value?.trim() ?? '';
   return trimmed === '' ? null : trimmed;
 }
 
-/** Collapses whitespace in the title and turns blank links into no link. */
+/** Keeps paragraphs, drops stray spaces and runs of blank lines. */
+export function normalizeSynopsis(text: string | null): string | null {
+  const clean = (text ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t\f\v]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n');
+  return nullIfBlank(clean);
+}
+
+/** Collapses whitespace in the title and turns blank fields into nothing. */
 export function normalizeBook(book: Book): Book {
+  const synopsis = normalizeSynopsis(book.synopsis);
   return {
     title: book.title.replace(/\s+/g, ' ').trim(),
+    synopsis,
+    synopsisSource: synopsis === null ? null : book.synopsisSource,
     synopsisUrl: nullIfBlank(book.synopsisUrl),
     coverUrl: nullIfBlank(book.coverUrl),
   };
@@ -56,11 +82,23 @@ function linkErrors(book: Book): BookError[] {
   return errors;
 }
 
+function synopsisErrors({ synopsis, synopsisSource }: Book): BookError[] {
+  const errors: BookError[] = [];
+  if (synopsis !== null && synopsis.length > BOOK_LIMITS.synopsis) {
+    errors.push('synopsis-too-long');
+  }
+  const knownSource = synopsisSource === null || SYNOPSIS_SOURCES.includes(synopsisSource);
+  if (!knownSource || (synopsisSource !== null && synopsis === null)) {
+    errors.push('synopsis-source-invalid');
+  }
+  return errors;
+}
+
 export function validateBook(book: Book): BookError[] {
   const errors: BookError[] = [];
   if (book.title.length === 0) errors.push('title-missing');
   if (book.title.length > BOOK_LIMITS.title) errors.push('title-too-long');
-  return [...errors, ...linkErrors(book)];
+  return [...errors, ...synopsisErrors(book), ...linkErrors(book)];
 }
 
 export interface TitleParts {

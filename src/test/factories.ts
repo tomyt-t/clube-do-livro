@@ -3,6 +3,9 @@ import type { Book, Cycle } from '@/domain/types';
 export function makeBook(overrides: Partial<Book> = {}): Book {
   return {
     title: 'Torto Arado, Itamar Vieira Junior',
+    synopsis:
+      'Duas irmãs crescem numa fazenda do sertão baiano, marcadas por um acidente na infância.',
+    synopsisSource: null,
     synopsisUrl: 'https://example.com/torto-arado',
     coverUrl: 'https://covers.openlibrary.org/b/id/12369648-L.jpg',
     ...overrides,

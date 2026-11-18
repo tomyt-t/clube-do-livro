@@ -9,6 +9,7 @@ import { countOf, formatDay } from '@/ui/format';
 import { ExternalIcon } from '@/ui/icons';
 
 import styles from './CurrentReading.module.css';
+import { ReadingSynopsis } from './ReadingSynopsis';
 
 /** "Escolhida …": how the club got to this book. */
 const CHOSEN: Record<DecisionMethod, string> = {
@@ -29,7 +30,7 @@ interface CurrentReadingProps {
 export function CurrentReading({ cycle, winner }: CurrentReadingProps) {
   const titleId = useId();
   const { title, author } = splitTitle(winner.book.title);
-  const { synopsisUrl } = winner.book;
+  const { synopsis, synopsisUrl } = winner.book;
 
   return (
     <article className={styles.reading} aria-labelledby={titleId}>
@@ -62,7 +63,9 @@ export function CurrentReading({ cycle, winner }: CurrentReadingProps) {
         </div>
       </dl>
 
-      {synopsisUrl && (
+      {synopsis !== null && <ReadingSynopsis book={winner.book} text={synopsis} />}
+
+      {synopsis === null && synopsisUrl && (
         <div className={styles.actions}>
           <a
             className={buttonClass({ variant: 'secondary' })}

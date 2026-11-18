@@ -68,9 +68,22 @@ describe('toBook', () => {
   it('fills safe defaults for missing optional fields', () => {
     expect(toBook({ title: 'Torto Arado' })).toEqual({
       title: 'Torto Arado',
+      synopsis: null,
+      synopsisSource: null,
       synopsisUrl: null,
       coverUrl: null,
     });
+  });
+
+  it('credits only known synopsis sources, and only with a text', () => {
+    expect(toBook({ title: 'A', synopsis: 'Texto', synopsisSource: 'anilist' })).toMatchObject({
+      synopsis: 'Texto',
+      synopsisSource: 'anilist',
+    });
+    expect(
+      toBook({ title: 'A', synopsis: 'Texto', synopsisSource: 'blog' })?.synopsisSource,
+    ).toBeNull();
+    expect(toBook({ title: 'A', synopsisSource: 'anilist' })?.synopsisSource).toBeNull();
   });
 
   it('rejects books without a title', () => {

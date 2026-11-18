@@ -8,7 +8,13 @@ describe('toBookData', () => {
   it('normalizes the book and keeps exactly the stored fields', () => {
     const data = toBookData({ ...makeBook({ title: '  Torto   Arado ' }), extra: 'x' } as never);
     expect(data.title).toBe('Torto Arado');
-    expect(Object.keys(data).sort()).toEqual(['coverUrl', 'synopsisUrl', 'title']);
+    expect(Object.keys(data).sort()).toEqual([
+      'coverUrl',
+      'synopsis',
+      'synopsisSource',
+      'synopsisUrl',
+      'title',
+    ]);
   });
 
   it('URL-encodes links so they are plain ASCII', () => {

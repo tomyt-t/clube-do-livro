@@ -197,9 +197,22 @@ describe('book validation', () => {
     await assertSucceeds(rawNominate(dbAs(env, ana), ana.uid, { ...valid, coverUrl }));
   });
 
+  it('accepts a synopsis credited to a catalog, or none at all', async () => {
+    await assertSucceeds(
+      rawNominate(dbAs(env, ana), ana.uid, { ...valid, synopsisSource: 'wikipedia' }),
+    );
+    await assertSucceeds(
+      rawNominate(dbAs(env, bia), bia.uid, { ...valid, synopsis: null, synopsisSource: null }),
+    );
+  });
+
   it.each([
     ['an empty title', { title: '' }],
     ['an unknown field', { nominatedBy: 'ana' }],
+    ['a synopsis over 2000 characters', { synopsis: 'x'.repeat(2001) }],
+    ['an empty synopsis', { synopsis: '' }],
+    ['an unknown synopsis source', { synopsisSource: 'blog' }],
+    ['a source without a synopsis', { synopsis: null, synopsisSource: 'anilist' }],
     ['a non-https synopsis link', { synopsisUrl: 'http://example.com/sinopse' }],
     ['a script link as cover', { coverUrl: 'javascript:alert(1)' }],
     ['an SVG upload', { coverUrl: 'data:image/svg+xml;base64,PHN2Zz4=' }],

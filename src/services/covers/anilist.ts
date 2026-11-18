@@ -12,6 +12,7 @@ query ($search: String) {
       id
       format
       title { romaji english }
+      description(asHtml: false)
       coverImage { extraLarge large }
       startDate { year }
       staff(perPage: 1, sort: RELEVANCE) { nodes { name { full } } }
@@ -52,6 +53,8 @@ function toOption(media: unknown): CoverOption | null {
     title,
     details: detailsOf(media),
     source: 'anilist',
+    synopsis: textAt(media, 'description'),
+    workKey: null,
   };
 }
 

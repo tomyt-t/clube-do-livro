@@ -26,6 +26,8 @@ export function toBookData(book: Book): Book {
   const clean = normalizeBook(book);
   const data: Book = {
     title: clean.title,
+    synopsis: clean.synopsis,
+    synopsisSource: clean.synopsisSource,
     synopsisUrl: encodeLink(clean.synopsisUrl),
     coverUrl: encodeLink(clean.coverUrl),
   };

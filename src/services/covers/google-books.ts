@@ -10,7 +10,7 @@ export function googleBooksUrl(query: string, apiKey: string): string {
   const params = new URLSearchParams({
     q: query,
     maxResults: '8',
-    fields: 'items(id,volumeInfo(title,authors,publishedDate,imageLinks/thumbnail))',
+    fields: 'items(id,volumeInfo(title,authors,publishedDate,description,imageLinks/thumbnail))',
     key: apiKey,
   });
   return `https://www.googleapis.com/books/v1/volumes?${params.toString()}`;
@@ -46,6 +46,8 @@ function toOption(item: unknown): CoverOption | null {
     title,
     details: joinDetails([author, year]),
     source: 'google-books',
+    synopsis: textAt(info, 'description'),
+    workKey: null,
   };
 }
 

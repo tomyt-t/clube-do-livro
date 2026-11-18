@@ -14,11 +14,17 @@ export type NominationId = string;
 export interface Book {
   /** Free text from the "Título / autor" field, e.g. "Berserk, Kentaro Miura". */
   title: string;
+  /** Synopsis text, found automatically and possibly edited by the member. */
+  synopsis: string | null;
+  /** Where the synopsis text came from, for credit; null when the member wrote it. */
+  synopsisSource: SynopsisSource | null;
   /** Optional link to a synopsis, pasted by the member. */
   synopsisUrl: string | null;
   /** An https image suggested by a catalog, or a small uploaded image (`data:image/...`). */
   coverUrl: string | null;
 }
+
+export type SynopsisSource = 'wikipedia' | 'open-library' | 'google-books' | 'anilist';
 
 export type CycleStatus =
   | 'nominating'

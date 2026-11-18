@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { makeBook } from '@/test/factories';
 
-import { BOOK_LIMITS, isUploadedCover, normalizeBook, splitTitle, validateBook } from './book';
+import {
+  BOOK_LIMITS,
+  isUploadedCover,
+  normalizeBook,
+  normalizeSynopsis,
+  splitTitle,
+  validateBook,
+} from './book';
 
 const TINY_JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2w==';
 
@@ -11,6 +18,18 @@ describe('normalizeBook', () => {
     expect(normalizeBook(makeBook({ title: '  Berserk,   Kentaro  Miura ' })).title).toBe(
       'Berserk, Kentaro Miura',
     );
+  });
+
+  it('keeps synopsis paragraphs but drops stray spaces and blank runs', () => {
+    expect(normalizeSynopsis('  Primeiro   parágrafo. \r\n\n\n\n  Segundo.  ')).toBe(
+      'Primeiro parágrafo.\n\nSegundo.',
+    );
+    expect(normalizeSynopsis('   ')).toBeNull();
+  });
+
+  it('forgets the source of a synopsis that was erased', () => {
+    const book = normalizeBook(makeBook({ synopsis: ' ', synopsisSource: 'wikipedia' }));
+    expect(book).toMatchObject({ synopsis: null, synopsisSource: null });
   });
 
   it('turns blank links into missing links', () => {
@@ -27,15 +46,32 @@ describe('validateBook', () => {
   });
 
   it('accepts a title alone, without cover or link', () => {
-    expect(validateBook({ title: 'Um livro qualquer', synopsisUrl: null, coverUrl: null })).toEqual(
-      [],
-    );
+    const bare = {
+      title: 'Um livro qualquer',
+      synopsis: null,
+      synopsisSource: null,
+      synopsisUrl: null,
+      coverUrl: null,
+    };
+    expect(validateBook(bare)).toEqual([]);
   });
 
   it('requires a title within the limit', () => {
     expect(validateBook(makeBook({ title: '' }))).toEqual(['title-missing']);
     expect(validateBook(makeBook({ title: 'x'.repeat(BOOK_LIMITS.title + 1) }))).toEqual([
       'title-too-long',
+    ]);
+  });
+
+  it('limits the synopsis and only credits known sources', () => {
+    const long = 'x'.repeat(BOOK_LIMITS.synopsis + 1);
+    expect(validateBook(makeBook({ synopsis: long }))).toEqual(['synopsis-too-long']);
+    expect(validateBook(makeBook({ synopsisSource: 'anilist' }))).toEqual([]);
+    expect(validateBook(makeBook({ synopsisSource: 'blog' as never }))).toEqual([
+      'synopsis-source-invalid',
+    ]);
+    expect(validateBook(makeBook({ synopsis: null, synopsisSource: 'wikipedia' }))).toEqual([
+      'synopsis-source-invalid',
     ]);
   });
 

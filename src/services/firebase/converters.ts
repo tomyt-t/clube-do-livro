@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 
+import { SYNOPSIS_SOURCES } from '@/domain/book';
 import type {
   Book,
   Cycle,
@@ -73,8 +74,11 @@ export function toResults(value: unknown): VoteResults | null {
 
 export function toBook(value: unknown): Book | null {
   if (!isRecord(value) || text(value.title) === '') return null;
+  const synopsis = textOrNull(value.synopsis);
   return {
     title: text(value.title),
+    synopsis,
+    synopsisSource: synopsis === null ? null : oneOf(value.synopsisSource, SYNOPSIS_SOURCES),
     synopsisUrl: textOrNull(value.synopsisUrl),
     coverUrl: textOrNull(value.coverUrl),
   };
