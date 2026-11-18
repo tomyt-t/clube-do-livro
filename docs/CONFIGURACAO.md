@@ -51,7 +51,10 @@ para o Firebase:
 4. No [Google Cloud Console](https://console.cloud.google.com), no mesmo projeto, abra **APIs e
    serviços → Credenciais → Browser key (auto created by Firebase)**:
    - **Restrições de aplicativo → Referenciadores HTTP**: `https://<seu-usuario>.github.io/*`
-     (ou o seu domínio);
+     (ou o seu domínio) **e** `https://<id-do-projeto>.firebaseapp.com/*`. O segundo é o
+     domínio do login: a janela do Google e a página do link por email usam a chave a partir
+     dele, e sem ele ninguém entra. Não inclua `localhost`. Scripts conseguem falsificar o
+     referenciador, então quem protege de verdade é a lista de APIs abaixo;
    - **Restrições de API**: só Identity Toolkit API, Token Service API, Cloud Firestore API,
      Firebase Installations API, Firebase App Check API e, se usar a conferência com o Gemini,
      Firebase AI Logic API. **Nunca** a Generative Language API: com ela, a chave pública do
@@ -166,9 +169,13 @@ O App Check impede que scripts fora do site usem o seu projeto Firebase.
 2. Em **Firebase → App Check**, registre o app da Web com o provedor **Fraud Defense** e essa
    chave de site. Ele não pede chave secreta.
 3. Salve a chave de site na variável `VITE_APPCHECK_SITE_KEY` e publique.
-4. Quando as métricas do App Check mostrarem só tráfego verificado, ative a **aplicação
-   (enforcement)** para o Firestore, o Authentication e, se usar a conferência, o Firebase AI
-   Logic.
+4. Exija o App Check (**aplicação / enforcement**) **só** para o Firebase AI Logic. Não exija
+   para o Firestore nem para o Authentication: cada troca de token gasta uma das 10 mil
+   verificações grátis do mês, e quem quiser pode gastá-las de propósito. Se isso acontecer com
+   o banco e o login exigindo App Check, ninguém entra no site até o mês virar. Só o Gemini
+   parar é inofensivo: a conferência volta para a comparação exata.
+5. Em **App Check → Apps**, aumente a validade do token (TTL) para 1 dia. Com 1 hora, cada aba
+   aberta troca de token a cada hora e gasta verificações à toa.
 
 ### Conferência de indicações repetidas (Gemini)
 

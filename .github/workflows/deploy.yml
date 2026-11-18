@@ -57,10 +57,12 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-          cache: npm
+          # No cache: other workflows run install scripts and fill it, and the
+          # site should be built from the lockfile's packages alone.
 
-      # No install scripts: the build's output is the published site, so no
-      # dependency gets to run code before it.
+      # No install scripts. Dependencies still run during the checks and the
+      # build; the lockfile, its integrity hashes and Dependabot's cooldown are
+      # what guard them.
       - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm run build

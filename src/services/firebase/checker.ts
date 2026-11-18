@@ -44,7 +44,9 @@ export function createFirebaseChecker(app: FirebaseApp, model: string | null): D
         const titles = nominations.map(({ book }) => book.title);
         const result = await gemini.generateContent(duplicatePrompt(titles));
         return combineFindings(exact, parseDuplicateGroups(result.response.text(), nominations));
-      } catch {
+      } catch (error) {
+        // Visible in the browser console, so a silent fallback can be told apart.
+        console.warn('Conferência sem Gemini (usando só a comparação exata):', error);
         return exact;
       }
     },
