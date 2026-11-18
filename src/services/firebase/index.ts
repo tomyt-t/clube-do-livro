@@ -5,6 +5,7 @@ import type { Backend } from '../backend';
 import { createFirebaseAdmin } from './admin';
 import { initFirebase } from './app';
 import { createFirebaseAuth } from './auth';
+import { createFirebaseChecker } from './checker';
 import { createFirebaseClub } from './club';
 import { createFirebaseFlow } from './flow';
 
@@ -18,5 +19,6 @@ export function createFirebaseBackend(config: FirebaseAppConfig): Backend {
     club: createFirebaseClub(services),
     flow: createFirebaseFlow(services),
     admin: createFirebaseAdmin(services),
+    checker: createFirebaseChecker(services.app, config.aiModel),
   };
 }

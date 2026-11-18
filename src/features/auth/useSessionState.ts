@@ -22,7 +22,7 @@ export function useSessionState(backend: Backend): Session {
         const access = await auth.checkAccess(user);
         if (!isCurrent()) return;
         if (access.status === 'denied') {
-          setState({ status: 'denied', user });
+          setState({ status: 'denied', user, taken: access.taken === true });
           return;
         }
         setState({ status: 'member', user, isAdmin: access.isAdmin });

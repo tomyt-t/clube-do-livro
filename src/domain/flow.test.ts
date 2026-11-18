@@ -21,7 +21,7 @@ describe('everyone', () => {
 });
 
 describe('nextFlowStep', () => {
-  it('opens the vote once everyone answered and someone nominated', () => {
+  it('opens the list for the check once everyone answered and someone nominated', () => {
     const waiting = makeCycle({
       status: 'nominating',
       responses: 5,
@@ -30,8 +30,24 @@ describe('nextFlowStep', () => {
     const ready = makeCycle({ status: 'nominating', responses: 6, nominationIds: ['a', 'b', 'c'] });
     const nobody = makeCycle({ status: 'nominating', responses: 6, nominationIds: [] });
     expect(nextFlowStep([waiting], 6)).toBeNull();
-    expect(nextFlowStep([ready], 6)).toEqual({ kind: 'open-voting', cycle: ready });
+    expect(nextFlowStep([ready], 6)).toEqual({ kind: 'start-review', cycle: ready });
     expect(nextFlowStep([nobody], 6)).toBeNull();
+    // Someone let go is still choosing again, even if the count says everyone answered.
+    const letGo = makeCycle({ ...ready, letGo: ['x'], letGoAt: new Date() });
+    expect(nextFlowStep([letGo], 6)).toBeNull();
+  });
+
+  it('checks the open list, then opens the vote only if nothing was flagged', () => {
+    const answered = { status: 'nominating' as const, responses: 6, nominationIds: ['a', 'b'] };
+    const checking = makeCycle({ ...answered, review: { conflicts: null } });
+    const clear = makeCycle({ ...answered, review: { conflicts: [] } });
+    const flagged = makeCycle({
+      ...answered,
+      review: { conflicts: [{ ids: ['a', 'b'], reason: 'Mesmo título.' }] },
+    });
+    expect(nextFlowStep([checking], 6)?.kind).toBe('check');
+    expect(nextFlowStep([clear], 6)?.kind).toBe('open-voting');
+    expect(nextFlowStep([flagged], 6)).toBeNull();
   });
 
   it('closes the vote once everyone voted, or right away with a single book', () => {

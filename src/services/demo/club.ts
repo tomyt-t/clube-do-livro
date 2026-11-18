@@ -1,6 +1,8 @@
 import { isPastDeadline } from '@/domain/cycle';
 import { normalizeBook, validateBook } from '@/domain/book';
+import { ballotSeat, isLetGo } from '@/domain/review';
 import { addBallot } from '@/domain/tally';
+import { titleKey } from '@/domain/title-key';
 import type { Cycle, CycleId, NominationAnswer, NominationId, VoteResults } from '@/domain/types';
 import { hasRoomForNomination, ownNominationOf, validateBallot } from '@/domain/voting';
 
@@ -10,6 +12,7 @@ import {
   type BallotInput,
   type ClubPort,
   type Subscriber,
+  type Unsubscribe,
 } from '../backend';
 
 import { deny, pause, requireMember, requireSelf, type DemoContext } from './context';
@@ -23,6 +26,50 @@ function watch<T>(
   return context.store.watch(select, subscriber.next);
 }
 
+type Guarded<T> = { allowed: true; value: T } | { allowed: false };
+
+/** A read the rules may refuse: like a Firestore listener, a refusal ends it with an error. */
+function watchGuarded<T>(
+  context: DemoContext,
+  select: (state: DemoState) => Guarded<T>,
+  subscriber: Subscriber<T>,
+): Unsubscribe {
+  let stop: () => void = () => undefined;
+  stop = context.store.watch(select, (result) => {
+    if (result.allowed) {
+      subscriber.next(result.value);
+      return;
+    }
+    stop();
+    subscriber.error(new BackendError('permission-denied', 'Permissão negada.'));
+  });
+  return () => {
+    stop();
+  };
+}
+
+/**
+ * Mirrors the rules: nominations stay hidden until everyone answered and the
+ * review began. A member whose nomination was let go sees the list (everyone
+ * saw it during the review), to choose again knowing what is on it.
+ */
+function isRevealed(state: DemoState, cycleId: CycleId): boolean {
+  const cycle = state.cycles[cycleId];
+  if (cycle === undefined) return false;
+  const answer = state.session ? state.answers[cycleId]?.[state.session] : undefined;
+  return cycle.status !== 'nominating' || cycle.review !== null || isLetGo(answer ?? null, cycle);
+}
+
+function isOwnNomination(state: DemoState, cycleId: CycleId, nominationId: NominationId) {
+  const answer = state.session ? state.answers[cycleId]?.[state.session] : undefined;
+  return ownNominationOf(answer ?? null) === nominationId;
+}
+
+function isTitleTakenIn(state: DemoState, cycleId: CycleId, title: string): boolean {
+  const key = titleKey(title);
+  return (state.nominations[cycleId] ?? []).some(({ book }) => titleKey(book.title) === key);
+}
+
 function cycleOf(context: DemoContext, cycleId: CycleId): Cycle {
   return context.store.current.cycles[cycleId] ?? deny();
 }
@@ -34,14 +81,41 @@ function nominationFrom(answer: NominationAnswer, id: NominationId) {
   return { id, book };
 }
 
+/**
+ * Whether the member may answer now: once, while nominations are open. A
+ * member whose nomination was let go answers again, even past the deadline
+ * (the vote waits for them).
+ */
+function isOpenTo(context: DemoContext, cycle: Cycle, uid: string): boolean {
+  const previous = context.store.current.answers[cycle.id]?.[uid] ?? null;
+  const letGo = isLetGo(previous, cycle);
+  if (cycle.status !== 'nominating' || cycle.review !== null) return false;
+  if (previous !== null && !letGo) return false;
+  return letGo || !isPastDeadline(cycle.nominationDeadline);
+}
+
 function assertCanAnswer(context: DemoContext, { cycleId, uid, answer }: AnswerInput) {
   const cycle = cycleOf(context, cycleId);
-  const answered = context.store.current.answers[cycleId]?.[uid] !== undefined;
   const full = answer.kind === 'nominate' && !hasRoomForNomination(cycle.nominationIds);
-  if (cycle.status !== 'nominating' || isPastDeadline(cycle.nominationDeadline) || answered) {
+  if (!isOpenTo(context, cycle, uid)) deny();
+  if (full) deny();
+  if (
+    answer.kind === 'nominate' &&
+    isTitleTakenIn(context.store.current, cycleId, answer.book.title)
+  ) {
     deny();
   }
-  if (full) deny();
+}
+
+/** The choices fit the member's seat: never their own reading, one fewer if theirs was merged. */
+function isValidBallot(cycle: Cycle, state: DemoState, input: BallotInput): boolean {
+  const own = ownNominationOf(state.answers[input.cycleId]?.[input.uid] ?? null);
+  const seat = ballotSeat(own, cycle.merged);
+  const countsFirst = input.countsFirst ?? true;
+  return (
+    validateBallot(cycle.options, seat.own, input.choices, seat.merged) === null &&
+    countsFirst !== seat.merged
+  );
 }
 
 function isAcceptingVotes(cycle: Cycle): boolean {
@@ -53,11 +127,45 @@ function assertCanVote(context: DemoContext, input: BallotInput): VoteResults {
   const state = context.store.current;
   const cycle = cycleOf(context, input.cycleId);
   const voted = state.receipts[input.cycleId]?.includes(input.uid) ?? false;
-  const own = ownNominationOf(state.answers[input.cycleId]?.[input.uid] ?? null);
-
   if (voted || !isAcceptingVotes(cycle) || input.choices.length === 0) deny();
-  if (validateBallot(cycle.options, own, input.choices) !== null) deny();
+  if (!isValidBallot(cycle, state, input)) deny();
   return state.tallies[input.cycleId] ?? deny();
+}
+
+/** Nominations, read the way the rules allow: hidden until the vote opens. */
+function nominationReads(
+  context: DemoContext,
+): Pick<ClubPort, 'watchNominations' | 'watchOwnNomination' | 'isTitleTaken'> {
+  return {
+    watchNominations: (cycleId, subscriber) =>
+      watchGuarded(
+        context,
+        (state) =>
+          isRevealed(state, cycleId)
+            ? { allowed: true, value: state.nominations[cycleId] ?? [] }
+            : { allowed: false },
+        subscriber,
+      ),
+
+    watchOwnNomination: (cycleId, nominationId, subscriber) =>
+      watchGuarded(
+        context,
+        (state) => {
+          if (!isRevealed(state, cycleId) && !isOwnNomination(state, cycleId, nominationId)) {
+            return { allowed: false };
+          }
+          const found = state.nominations[cycleId]?.find(({ id }) => id === nominationId);
+          return { allowed: true, value: found ?? null };
+        },
+        subscriber,
+      ),
+
+    isTitleTaken: async (cycleId, title) => {
+      await pause(context);
+      requireMember(context);
+      return isTitleTakenIn(context.store.current, cycleId, title);
+    },
+  };
 }
 
 export function createDemoClub(context: DemoContext): ClubPort {
@@ -66,8 +174,7 @@ export function createDemoClub(context: DemoContext): ClubPort {
   return {
     watchCycles: (subscriber) => watch(context, (state) => Object.values(state.cycles), subscriber),
 
-    watchNominations: (cycleId, subscriber) =>
-      watch(context, (state) => state.nominations[cycleId] ?? [], subscriber),
+    ...nominationReads(context),
 
     watchOwnAnswer: (cycleId, uid, subscriber) =>
       watch(context, (state) => state.answers[cycleId]?.[uid] ?? null, subscriber),
@@ -92,6 +199,7 @@ export function createDemoClub(context: DemoContext): ClubPort {
       requireSelf(context, uid);
       assertCanAnswer(context, input);
       const nomination = nominationFrom(answer, crypto.randomUUID());
+      const previous = store.current.answers[cycleId]?.[uid];
 
       store.update((state) => {
         if (nomination)
@@ -106,6 +214,8 @@ export function createDemoClub(context: DemoContext): ClubPort {
         if (!cycle) return;
         cycle.responses += 1;
         if (nomination) cycle.nominationIds = [...cycle.nominationIds, nomination.id];
+        const replaced = ownNominationOf(previous ?? null);
+        cycle.letGo = cycle.letGo.filter((id) => id !== replaced);
       });
       return nomination?.id ?? null;
     },
@@ -116,10 +226,10 @@ export function createDemoClub(context: DemoContext): ClubPort {
       requireSelf(context, input.uid);
       const tally = assertCanVote(context, input);
 
-      const { cycleId, uid, choices } = input;
+      const { cycleId, uid, choices, countsFirst = true } = input;
       store.update((state) => {
         state.receipts[cycleId] = [...(state.receipts[cycleId] ?? []), uid];
-        state.tallies[cycleId] = addBallot(tally, choices);
+        state.tallies[cycleId] = addBallot(tally, choices, countsFirst);
         const cycle = state.cycles[cycleId];
         if (cycle) cycle.ballots += 1;
       });

@@ -29,7 +29,7 @@ function ReadingOverview({ cycles }: { cycles: readonly Cycle[] }) {
 export function ReadingPage() {
   const cycles = useCycles();
   return (
-    <Page title="Lendo agora" hideTitle>
+    <Page title="Lendo" titleOnPhones={false}>
       {cycles.status === 'loading' && <Loading />}
       {cycles.status === 'error' && (
         <Notice tone="error" title="Não foi possível abrir a leitura atual">

@@ -1,3 +1,4 @@
+import type { ConflictGroup, Merged } from '@/domain/review';
 import type {
   Book,
   ClubSettings,
@@ -47,7 +48,10 @@ export interface SessionUser {
   photoURL: string | null;
 }
 
-export type Access = { status: 'member'; isAdmin: boolean } | { status: 'denied' };
+export type Access =
+  | { status: 'member'; isAdmin: boolean }
+  /** `taken`: the email is on the list, but another account already uses it. */
+  | { status: 'denied'; taken?: boolean };
 
 export type LinkSignInResult = 'not-a-link' | 'needs-email' | 'signed-in';
 
@@ -81,11 +85,25 @@ export interface BallotInput {
   uid: MemberId;
   /** First choice, then second choice. */
   choices: RankedChoices;
+  /**
+   * False when the member's first choice is already counted: their
+   * nomination was merged with an equal one. Defaults to true.
+   */
+  countsFirst?: boolean;
 }
 
 export interface ClubPort {
   watchCycles(subscriber: Subscriber<Cycle[]>): Unsubscribe;
+  /** Every nomination, once the nomination call is over; refused before that. */
   watchNominations(cycleId: CycleId, subscriber: Subscriber<Nomination[]>): Unsubscribe;
+  /** One nomination: during the nomination call, only the member's own. */
+  watchOwnNomination(
+    cycleId: CycleId,
+    nominationId: NominationId,
+    subscriber: Subscriber<Nomination | null>,
+  ): Unsubscribe;
+  /** Whether a reading with this title (see `titleKey`) was already nominated. */
+  isTitleTaken(cycleId: CycleId, title: string): Promise<boolean>;
   watchOwnAnswer(
     cycleId: CycleId,
     uid: MemberId,
@@ -110,6 +128,8 @@ export interface ClubPort {
 export interface StartVotingInput {
   cycleId: CycleId;
   options: readonly NominationId[];
+  /** The tally the vote opens with: zero, plus merged readings' head start. */
+  opening: VoteResults;
   votingDeadline: Date | null;
 }
 
@@ -130,7 +150,11 @@ export interface DeclareWinnerInput {
  * has done their part; the organizer may take one at any time.
  */
 export interface FlowPort {
-  /** Fixes the ballot's options and opens an empty tally. */
+  /** Everyone answered: the list opens and no more nominations come in. */
+  startReview(cycleId: CycleId): Promise<void>;
+  /** Records what the duplicate check found (maybe nothing); once per check. */
+  recordReview(cycleId: CycleId, groups: readonly ConflictGroup[]): Promise<void>;
+  /** Fixes the ballot's options and opens the tally. */
   startVoting(input: StartVotingInput): Promise<void>;
   closeVoting(cycleId: CycleId): Promise<void>;
   /** Reads the tally, readable only once voting has closed. */
@@ -138,6 +162,14 @@ export interface FlowPort {
   declareWinner(input: DeclareWinnerInput): Promise<void>;
   /** Ends the book everyone finished and opens the next round, in one step. */
   finishAndOpenNext(input: { cycleId: CycleId; nextNumber: number }): Promise<CycleId>;
+}
+
+/**
+ * Finds readings nominated twice under different titles. It only flags: the
+ * organizer decides. Runs in the browser of whoever takes the step.
+ */
+export interface DuplicateChecker {
+  findDuplicates(nominations: readonly Nomination[]): Promise<ConflictGroup[]>;
 }
 
 // ------------------------------------------------------------------ admin
@@ -160,7 +192,31 @@ export interface AdminPort {
   deleteCycle(cycleId: CycleId): Promise<void>;
   startReading(cycleId: CycleId): Promise<void>;
   finishReading(cycleId: CycleId): Promise<void>;
+  /** Ends a round nobody nominated in (see `isEmptyRoundOver`). */
+  endEmptyRound(cycleId: CycleId): Promise<void>;
   watchAllowlist(subscriber: Subscriber<AllowlistEntry[]>): Unsubscribe;
+  /**
+   * Who nominated each flagged reading, so the organizer can talk to them:
+   * only readings in the review's conflicts, and only while it is open.
+   */
+  findNominators(
+    cycleId: CycleId,
+    nominationIds: readonly NominationId[],
+  ): Promise<Record<NominationId, MemberId[]>>;
+  /** Dismisses or merges flagged groups: what remains flagged, and every merge so far. */
+  updateReview(input: {
+    cycleId: CycleId;
+    groups: readonly ConflictGroup[];
+    merged: Merged;
+  }): Promise<void>;
+  /**
+   * Lets members nominate again, now seeing the list: their answers and
+   * nominations go, and the nomination call reopens for them.
+   */
+  reopenNominations(input: {
+    cycleId: CycleId;
+    nominationIds: readonly NominationId[];
+  }): Promise<void>;
   /** Emails must already be normalized (trimmed, lowercase). */
   allowEmails(emails: readonly string[]): Promise<void>;
   revokeEmail(email: string): Promise<void>;
@@ -174,4 +230,5 @@ export interface Backend {
   club: ClubPort;
   flow: FlowPort;
   admin: AdminPort;
+  checker: DuplicateChecker;
 }

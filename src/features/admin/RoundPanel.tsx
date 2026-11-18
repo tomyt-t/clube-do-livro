@@ -2,10 +2,12 @@ import { useId, useState } from 'react';
 
 import { useBackend } from '@/app/services';
 import { splitTitle } from '@/domain/book';
+import { isEmptyRoundOver } from '@/domain/cycle';
+import { isLetGoSettled, type ConflictGroup, type CycleReview } from '@/domain/review';
 import type { Cycle } from '@/domain/types';
 import { useCycles, useMemberCount } from '@/features/club/use-club';
 import type { Backend } from '@/services/backend';
-import { advance, finishCurrentReading, openNominations } from '@/services/election';
+import { advance, finishCurrentReading, openNominations, openVoting } from '@/services/election';
 import { Button } from '@/ui/Button';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { FINISHED, peopleOutOf, RESPONDED, VOTED } from '@/ui/format';
@@ -37,27 +39,75 @@ interface Context {
 
 const bookOf = (cycle: Cycle) => splitTitle(cycle.winner?.book.title ?? '').title;
 
-function nominatingView(cycle: Cycle, { backend, members }: Context): RoundView {
-  const responded = peopleOutOf(cycle.responses, members, RESPONDED);
+function reviewDetail(conflicts: readonly ConflictGroup[] | null): string {
+  if (conflicts === null) return 'Todos responderam. Procurando indicações repetidas.';
+  if (conflicts.length === 0) return 'Nenhuma indicação repetida. A votação abre em instantes.';
+  return 'Algumas indicações parecem ser a mesma leitura: resolva abaixo antes da votação.';
+}
+
+/** Everyone answered: the list is being checked, or waits for the organizer. */
+function reviewView(cycle: Cycle, review: CycleReview, { backend }: Context): RoundView {
+  const flagged = (review.conflicts?.length ?? 0) > 0;
+  return {
+    headline: `Rodada ${String(cycle.number)}: conferindo indicações`,
+    detail: reviewDetail(review.conflicts),
+    action: {
+      label: 'Abrir a votação agora',
+      confirm: {
+        title: 'Abrir a votação agora?',
+        body: flagged
+          ? 'As indicações que parecem repetidas entram separadas na cédula.'
+          : 'A cédula fica com todas as indicações, como estão.',
+      },
+      run: () => openVoting(backend.flow, cycle),
+    },
+  };
+}
+
+/** Nobody nominated and nobody else can: the round can only end. */
+function endEmptyAction(cycle: Cycle, { backend }: Context): RoundAction {
+  return {
+    label: 'Encerrar a rodada',
+    confirm: {
+      title: 'Encerrar a rodada sem leitura?',
+      body: 'Ninguém indicou nesta rodada, então não há o que votar. Depois, abra a próxima.',
+    },
+    run: () => backend.admin.endEmptyRound(cycle.id),
+  };
+}
+
+function openEarlyAction(cycle: Cycle, responded: string, { backend }: Context): RoundAction {
+  return {
+    label: 'Abrir a votação agora',
+    confirm: {
+      title: 'Abrir a votação sem esperar todos?',
+      body: `${responded} Quem não respondeu fica sem indicar, mas ainda vota.`,
+    },
+    run: () => openVoting(backend.flow, cycle),
+  };
+}
+
+function letGoDetail(cycle: Cycle): string {
+  const waiting = cycle.letGo.length === 1 ? '1 pessoa' : `${String(cycle.letGo.length)} pessoas`;
+  return `Esperando ${waiting} indicar de novo; a votação só abre depois disso (ou em até 3 dias).`;
+}
+
+function nominatingAction(cycle: Cycle, responded: string, context: Context): RoundAction | null {
+  if (isEmptyRoundOver(cycle, context.members)) return endEmptyAction(cycle, context);
+  if (cycle.nominationIds.length === 0 || !isLetGoSettled(cycle)) return null;
+  return openEarlyAction(cycle, responded, context);
+}
+
+function nominatingView(cycle: Cycle, context: Context): RoundView {
+  if (cycle.review !== null) return reviewView(cycle, cycle.review, context);
+  const responded = peopleOutOf(cycle.responses, context.members, RESPONDED);
   const nobody = cycle.nominationIds.length === 0;
+  const waiting = nobody ? 'Ninguém indicou ainda.' : 'A votação abre quando todos responderem.';
+  const status = isLetGoSettled(cycle) ? waiting : letGoDetail(cycle);
   return {
     headline: `Rodada ${String(cycle.number)}: indicações abertas`,
-    detail: `${responded} ${nobody ? 'Ninguém indicou ainda.' : 'A votação abre quando todos responderem.'}`,
-    action: nobody
-      ? null
-      : {
-          label: 'Abrir a votação agora',
-          confirm: {
-            title: 'Abrir a votação sem esperar todos?',
-            body: `${responded} Quem não respondeu fica sem indicar, mas ainda vota.`,
-          },
-          run: () =>
-            backend.flow.startVoting({
-              cycleId: cycle.id,
-              options: cycle.nominationIds,
-              votingDeadline: null,
-            }),
-        },
+    detail: `${responded} ${status}`,
+    action: nominatingAction(cycle, responded, context),
   };
 }
 
@@ -121,7 +171,8 @@ function viewOf(round: Round, context: Context): RoundView {
         action: {
           label: 'Apurar agora',
           confirm: null,
-          run: () => advance(backend, { kind: 'declare', cycle: round.cycle }, cycles),
+          run: () =>
+            advance(backend, { kind: 'declare', cycle: round.cycle }, cycles, { canFlag: true }),
         },
       };
     case 'reading':

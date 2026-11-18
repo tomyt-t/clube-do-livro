@@ -19,5 +19,10 @@ export function newCycleData(number: number, nominationDeadline: Date | null) {
     readingStartedAt: null,
     finishedReaders: 0,
     finishedAt: null,
+    review: null,
+    merged: {},
+    letGo: [],
+    letGoAt: null,
+    flagged: [],
   };
 }

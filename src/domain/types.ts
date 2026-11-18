@@ -1,3 +1,5 @@
+import type { CycleReview, Merged } from './review';
+
 /**
  * Core vocabulary of the club. A *cycle* is one pass of
  * nominate → vote → count → read, and produces one book.
@@ -88,6 +90,16 @@ export interface Cycle {
   /** Members who marked "Acabei de ler!"; never who. */
   finishedReaders: number;
   finishedAt: Date | null;
+  /** Once everyone answered: the check for readings nominated twice; null before. */
+  review: CycleReview | null;
+  /** Nominations merged into an equal one before the vote. */
+  merged: Merged;
+  /** Nominations the organizer let go whose members have not answered again yet. */
+  letGo: NominationId[];
+  /** When the last nominations were let go; the vote waits up to three days for them. */
+  letGoAt: Date | null;
+  /** Every nomination flagged by a check this round (the rules cap how many). */
+  flagged: NominationId[];
 }
 
 /** Club-wide settings everyone can read; only the organizer changes them. */

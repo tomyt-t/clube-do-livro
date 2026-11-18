@@ -6,10 +6,18 @@ import {
   statusAfterDecision,
 } from '@/domain/cycle';
 import type { FlowStep } from '@/domain/flow';
+import { ballotOptions, openingResults, type ConflictGroup } from '@/domain/review';
 import { decide, type Decision } from '@/domain/tally';
 import type { Cycle, CycleId, Nomination } from '@/domain/types';
 
-import type { AdminPort, Backend, FlowPort, Subscriber, Unsubscribe } from './backend';
+import type {
+  AdminPort,
+  Backend,
+  DuplicateChecker,
+  FlowPort,
+  Subscriber,
+  Unsubscribe,
+} from './backend';
 
 /**
  * The cycle's steps as complete operations. Each one is safe to retry and
@@ -37,8 +45,27 @@ export class ElectionError extends Error {
 export interface FlowContext {
   /** Every cycle, to know whether another book is being read. */
   cycles: readonly Cycle[];
-  /** The nominations of the cycle the step is about. */
+  /** The nominations of the cycle the step is about (read only for the steps that need them). */
   nominations: readonly Nomination[];
+  checker: DuplicateChecker;
+  /**
+   * Whether this device may flag readings: only the organizer's. Flags let
+   * the organizer see who nominated those readings, so a member's device
+   * may only record that nothing was found and leaves flags to the organizer.
+   */
+  canFlag: boolean;
+}
+
+/** Opens the vote with every nomination left after merges, merged ones ahead by their nominators. */
+export async function openVoting(flow: FlowPort, cycle: Cycle) {
+  const options = ballotOptions(cycle.nominationIds, cycle.merged);
+  if (options.length === 0) throw new ElectionError('no-nominations');
+  await flow.startVoting({
+    cycleId: cycle.id,
+    options,
+    opening: openingResults(options, cycle.merged),
+    votingDeadline: null,
+  });
 }
 
 /** The organizer opens the first round; later rounds open by themselves. */
@@ -74,9 +101,26 @@ export async function declareResult(
     method: decision.method,
     drawnFrom: decision.drawnFrom,
     results,
-    startReading: statusAfterDecision(context.cycles) === 'reading',
+    startReading: statusAfterDecision(context.cycles, cycle) === 'reading',
   });
   return decision;
+}
+
+/**
+ * Runs the duplicate check on what would be on the ballot: the round's list,
+ * minus readings merged away. A group made only of readings flagged earlier
+ * this round was already sorted out (kept apart), so it is not raised again.
+ */
+async function checkNominations(
+  checker: DuplicateChecker,
+  cycle: Cycle,
+  nominations: readonly Nomination[],
+): Promise<ConflictGroup[]> {
+  const listed = nominations.filter(
+    ({ id }) => cycle.nominationIds.includes(id) && !(id in cycle.merged),
+  );
+  const groups = await checker.findDuplicates(listed);
+  return groups.filter(({ ids }) => !ids.every((id) => cycle.flagged.includes(id)));
 }
 
 export async function takeFlowStep(
@@ -86,14 +130,16 @@ export async function takeFlowStep(
 ): Promise<void> {
   const { cycle } = step;
   switch (step.kind) {
+    case 'start-review':
+      await flow.startReview(cycle.id);
+      return;
+    case 'check': {
+      const groups = await checkNominations(context.checker, cycle, context.nominations);
+      if (groups.length === 0 || context.canFlag) await flow.recordReview(cycle.id, groups);
+      return;
+    }
     case 'open-voting':
-      // Exactly the nominations, in arrival order: what the server checks.
-      if (cycle.nominationIds.length === 0) throw new ElectionError('no-nominations');
-      await flow.startVoting({
-        cycleId: cycle.id,
-        options: cycle.nominationIds,
-        votingDeadline: null,
-      });
+      await openVoting(flow, cycle);
       return;
     case 'close-voting':
       await flow.closeVoting(cycle.id);
@@ -122,12 +168,27 @@ export function readOnce<T>(watch: (subscriber: Subscriber<T>) => Unsubscribe): 
   });
 }
 
-/** Takes a step with the nominations it needs, read once from the backend. */
-export async function advance(backend: Backend, step: FlowStep, cycles: readonly Cycle[]) {
-  const nominations = await readOnce<Nomination[]>((s) =>
-    backend.club.watchNominations(step.cycle.id, s),
-  );
-  await takeFlowStep(backend.flow, step, { cycles, nominations });
+/**
+ * Takes a step with the nominations it needs, read once from the backend.
+ * Only declaring the winner needs them, and only then may they be read:
+ * they stay hidden until the vote opens.
+ */
+export async function advance(
+  backend: Backend,
+  step: FlowStep,
+  cycles: readonly Cycle[],
+  { canFlag }: { canFlag: boolean },
+) {
+  const nominations =
+    step.kind === 'declare' || step.kind === 'check'
+      ? await readOnce<Nomination[]>((s) => backend.club.watchNominations(step.cycle.id, s))
+      : [];
+  await takeFlowStep(backend.flow, step, {
+    cycles,
+    nominations,
+    checker: backend.checker,
+    canFlag,
+  });
 }
 
 /** The organizer's manual way to end a book: the queued one starts, if any. */

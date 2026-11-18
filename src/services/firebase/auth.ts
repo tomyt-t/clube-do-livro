@@ -8,7 +8,7 @@ import {
   signOut,
   type User,
 } from 'firebase/auth';
-import { getDoc } from 'firebase/firestore';
+import { getDoc, type Firestore } from 'firebase/firestore';
 
 import { normalizeEmail } from '@/domain/email';
 
@@ -16,14 +16,25 @@ import type { Access, AuthPort, SessionUser } from '../backend';
 
 import type { FirebaseServices } from './app';
 import { guard, isCancelledSignIn, toBackendError } from './errors';
+import { claimSeat } from './member-writes';
 import { refs } from './refs';
 
 /** Remembers which email asked for a link, so opening it needs no typing. */
 const PENDING_EMAIL_KEY = 'clube-do-livro:email-for-sign-in';
 
+/** Kept no longer than a day: links expire well before, and the address should not linger. */
+const PENDING_EMAIL_TTL_MS = 24 * 60 * 60 * 1000;
+
 function readPendingEmail(): string | null {
   try {
-    return localStorage.getItem(PENDING_EMAIL_KEY);
+    const saved = JSON.parse(localStorage.getItem(PENDING_EMAIL_KEY) ?? 'null') as {
+      email?: unknown;
+      at?: unknown;
+    } | null;
+    const fresh = typeof saved?.at === 'number' && Date.now() - saved.at < PENDING_EMAIL_TTL_MS;
+    if (fresh && typeof saved.email === 'string') return saved.email;
+    localStorage.removeItem(PENDING_EMAIL_KEY);
+    return null;
   } catch {
     return null;
   }
@@ -31,17 +42,21 @@ function readPendingEmail(): string | null {
 
 function writePendingEmail(email: string | null) {
   try {
-    if (email) localStorage.setItem(PENDING_EMAIL_KEY, email);
+    if (email) localStorage.setItem(PENDING_EMAIL_KEY, JSON.stringify({ email, at: Date.now() }));
     else localStorage.removeItem(PENDING_EMAIL_KEY);
   } catch {
     // Storage blocked: the person will be asked for their email again.
   }
 }
 
+/**
+ * The name comes from the Google account only. Never from the email: the
+ * profile is public inside the club, and part of an address is still the
+ * address (email-link sign-ins get the club's fallback name instead).
+ */
 function toSessionUser(user: User): SessionUser {
   const email = user.email ?? '';
-  const name = user.displayName ?? email.split('@')[0] ?? '';
-  return { uid: user.uid, email, name, photoURL: user.photoURL };
+  return { uid: user.uid, email, name: user.displayName ?? '', photoURL: user.photoURL };
 }
 
 function currentPageUrl(): string {
@@ -53,13 +68,28 @@ function forgetLinkInUrl() {
   window.history.replaceState(null, '', `${window.location.pathname}${window.location.hash}`);
 }
 
+/**
+ * Whether this account holds the email's seat, claiming it the first time.
+ * Another account may claim it first: then this one is the second.
+ */
+async function holdsSeat(db: Firestore, email: string, uid: string, seat: unknown) {
+  if (seat !== undefined) return seat === uid;
+  return claimSeat(db, email, uid).then(
+    () => true,
+    () => false,
+  );
+}
+
 async function lookUpAccess({ auth, db }: FirebaseServices, user: SessionUser): Promise<Access> {
   if (auth.currentUser?.emailVerified !== true || user.email === '') return { status: 'denied' };
   try {
-    const entry = await getDoc(refs.allowlistEntry(db, normalizeEmail(user.email)));
-    return entry.exists()
-      ? { status: 'member', isAdmin: entry.get('admin') === true }
-      : { status: 'denied' };
+    const email = normalizeEmail(user.email);
+    const entry = await getDoc(refs.allowlistEntry(db, email));
+    if (!entry.exists()) return { status: 'denied' };
+    if (!(await holdsSeat(db, email, user.uid, entry.get('uid')))) {
+      return { status: 'denied', taken: true };
+    }
+    return { status: 'member', isAdmin: entry.get('admin') === true };
   } catch (error) {
     const failure = toBackendError(error);
     if (failure.code === 'permission-denied') return { status: 'denied' };
@@ -106,7 +136,10 @@ export function createFirebaseAuth(services: FirebaseServices): AuthPort {
       return 'signed-in';
     },
 
-    signOut: () => guard(signOut(auth)),
+    signOut: () => {
+      writePendingEmail(null);
+      return guard(signOut(auth));
+    },
 
     checkAccess: (user) => lookUpAccess(services, user),
   };

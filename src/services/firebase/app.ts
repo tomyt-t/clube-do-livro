@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import {
   browserLocalPersistence,
@@ -12,6 +12,7 @@ import { getFirestore, type Firestore } from 'firebase/firestore';
 import type { FirebaseConfig } from '@/config/env';
 
 export interface FirebaseServices {
+  app: FirebaseApp;
   auth: Auth;
   db: Firestore;
 }
@@ -36,5 +37,5 @@ export function initFirebase(
   });
   auth.languageCode = 'pt-BR';
 
-  return { auth, db: getFirestore(app) };
+  return { app, auth, db: getFirestore(app) };
 }

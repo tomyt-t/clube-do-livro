@@ -25,6 +25,8 @@ env:
 jobs:
   build:
     name: Build the site
+    # A manual run could otherwise publish any branch, skipping review.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -35,6 +37,7 @@ jobs:
       VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
       VITE_GOOGLE_BOOKS_API_KEY: ${{ vars.VITE_GOOGLE_BOOKS_API_KEY }}
       VITE_APPCHECK_SITE_KEY: ${{ vars.VITE_APPCHECK_SITE_KEY }}
+      VITE_AI_MODEL: ${{ vars.VITE_AI_MODEL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -56,7 +59,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - run: npm ci
+      # No install scripts: the build's output is the published site, so no
+      # dependency gets to run code before it.
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm run build
 
@@ -69,6 +74,7 @@ jobs:
   deploy:
     name: Publish to GitHub Pages
     needs: build
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

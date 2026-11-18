@@ -6,7 +6,7 @@ import type { NominationId, OwnAnswer, RankedChoices } from './types';
  * within 1000 expressions per request; `tests/rules/limits.test.ts` proves
  * the costliest cases fit. Must match `firestore.rules`.
  */
-export const MAX_OPTIONS = 20;
+export const MAX_OPTIONS = 16;
 
 /** Whether one more nomination still fits on the ballot. */
 export function hasRoomForNomination(nominationIds: readonly NominationId[]): boolean {
@@ -36,20 +36,27 @@ export function eligibleOptions(
 export function requiredChoices(
   options: readonly NominationId[],
   ownNomination: NominationId | null,
+  merged = false,
 ): number {
-  return Math.min(VOTES_PER_MEMBER, eligibleOptions(options, ownNomination).length);
+  const choices = merged ? 1 : VOTES_PER_MEMBER;
+  return Math.min(choices, eligibleOptions(options, ownNomination).length);
 }
 
 export type BallotError = 'wrong-count' | 'duplicate' | 'not-an-option' | 'own-nomination';
 
+/**
+ * `merged`: the member's nomination was merged with an equal one, so it
+ * already counts as their first choice and they pick only one more.
+ */
 export function validateBallot(
   options: readonly NominationId[],
   ownNomination: NominationId | null,
   choices: RankedChoices,
+  merged = false,
 ): BallotError | null {
   if (new Set(choices).size !== choices.length) return 'duplicate';
   if (choices.some((choice) => !options.includes(choice))) return 'not-an-option';
   if (ownNomination !== null && choices.includes(ownNomination)) return 'own-nomination';
-  if (choices.length !== requiredChoices(options, ownNomination)) return 'wrong-count';
+  if (choices.length !== requiredChoices(options, ownNomination, merged)) return 'wrong-count';
   return null;
 }

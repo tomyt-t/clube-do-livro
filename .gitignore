@@ -5,9 +5,11 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Environment (Firebase config lives here locally and in GitHub Actions variables)
-.env.local
-.env.*.local
+# Environment: only the shared defaults (.env), the demo switch and the
+# example are tracked. Real values live in .env.local or GitHub variables.
+.env.*
+!.env.example
+!.env.demo
 
 # Firebase emulator
 .firebase/

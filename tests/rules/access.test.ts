@@ -7,7 +7,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/fi
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 
 import { allowEmails, revokeEmail } from '@/services/firebase/admin-writes';
-import { saveMemberProfile } from '@/services/firebase/member-writes';
+import { claimSeat, saveMemberProfile } from '@/services/firebase/member-writes';
 
 import {
   admin,
@@ -17,6 +17,7 @@ import {
   createEnv,
   CYCLE,
   dbAs,
+  type Persona,
   guestDb,
   seedNominating,
   stranger,
@@ -60,6 +61,34 @@ describe('who gets in', () => {
   });
 });
 
+describe('seats', () => {
+  const dani: Persona = { uid: 'dani-uid', email: 'dani@example.com' };
+  const daniAgain: Persona = { uid: 'dani-uid-recreated', email: dani.email };
+
+  beforeEach(async () => {
+    await withoutRules(env, (db) => setDoc(doc(db, 'allowlist', dani.email), {}));
+  });
+
+  it('lets a new member in once their account claims the seat', async () => {
+    await assertFails(getDocs(collection(dbAs(env, dani), 'cycles')));
+    await assertSucceeds(claimSeat(dbAs(env, dani), dani.email, dani.uid));
+    await assertSucceeds(getDocs(collection(dbAs(env, dani), 'cycles')));
+  });
+
+  it('keeps a second account for the same email out', async () => {
+    await claimSeat(dbAs(env, dani), dani.email, dani.uid);
+    await assertFails(claimSeat(dbAs(env, daniAgain), dani.email, daniAgain.uid));
+    await assertFails(getDocs(collection(dbAs(env, daniAgain), 'cycles')));
+    await assertFails(getDocs(collection(dbAs(env, { ...ana, uid: 'ana-again' }), 'cycles')));
+  });
+
+  it("never lets anyone claim someone else's seat, or for another account", async () => {
+    await assertFails(claimSeat(dbAs(env, stranger), dani.email, stranger.uid));
+    await assertFails(claimSeat(dbAs(env, dani), dani.email, 'someone-else'));
+    await assertFails(claimSeat(dbAs(env, dani, false), dani.email, dani.uid));
+  });
+});
+
 describe('allowlist', () => {
   it('lets members check only their own entry', async () => {
     const db = dbAs(env, ana);
@@ -94,6 +123,17 @@ describe('allowlist', () => {
     await assertFails(setDoc(doc(db, 'allowlist', 'not-an-email'), {}));
     await assertFails(setDoc(doc(db, 'allowlist', 'friend@example.com'), { admin: 'yes' }));
     await assertFails(setDoc(doc(db, 'allowlist', 'friend@example.com'), { note: 'x' }));
+  });
+
+  it('lets the admin free a seat only by removing the email, never bind one', async () => {
+    const db = dbAs(env, admin);
+    await assertFails(setDoc(doc(db, 'allowlist', ana.email), { uid: stranger.uid }));
+    await assertSucceeds(setDoc(doc(db, 'allowlist', ana.email), { admin: true, uid: ana.uid }));
+    // A stale "add" of a listed email would free its seat: refused.
+    await assertFails(setDoc(doc(db, 'allowlist', ana.email), {}));
+    await assertSucceeds(revokeEmail(db, ana.email));
+    await assertSucceeds(allowEmails(db, [ana.email]));
+    await assertFails(getDocs(collection(dbAs(env, ana), 'cycles')));
   });
 
   it('keeps the admin from locking themselves out', async () => {

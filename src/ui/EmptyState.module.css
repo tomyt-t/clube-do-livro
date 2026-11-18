@@ -18,3 +18,14 @@
 .action {
   margin-block-start: var(--space-4);
 }
+
+/* Desktop: the rule spans the content column like every other; the text keeps its measure. */
+@media (min-width: 60rem) {
+  .empty {
+    max-inline-size: none;
+  }
+
+  .text {
+    max-inline-size: 32rem;
+  }
+}

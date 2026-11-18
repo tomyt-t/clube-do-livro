@@ -33,7 +33,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check

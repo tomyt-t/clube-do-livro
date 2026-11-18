@@ -92,3 +92,12 @@
 .addActions .detail {
   margin: 0;
 }
+
+/* A flagged group: why, the readings with who nominated each, and what to do. */
+.conflict {
+  margin-block-start: var(--space-4);
+}
+
+.conflict .members {
+  margin-block: var(--space-2) var(--space-3);
+}

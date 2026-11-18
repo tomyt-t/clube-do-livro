@@ -44,7 +44,7 @@ export async function answerAs(
 
 export async function voteAs(
   backend: DemoBackend,
-  ballot: { cycleId: CycleId; uid: string; choices: string[] },
+  ballot: { cycleId: CycleId; uid: string; choices: string[]; countsFirst?: boolean },
 ) {
   backend.auth.signInAs(ballot.uid);
   try {
@@ -94,7 +94,9 @@ export async function settle(backend: DemoBackend, uid = 'rafa') {
       const cycles = await cyclesOf(backend);
       const step = nextFlowStep(cycles, settings.members);
       if (!step) return;
-      await advance(backend, step, cycles);
+      await advance(backend, step, cycles, { canFlag: uid === 'marina' });
+      // A member who found flags leaves them to the organizer: nothing changed.
+      if (JSON.stringify(await cyclesOf(backend)) === JSON.stringify(cycles)) return;
     }
     throw new Error('The flow did not settle.');
   } finally {

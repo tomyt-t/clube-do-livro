@@ -64,3 +64,9 @@ export function peopleOutOf(count: number, total: number, verb: Verb): string {
 export function countOf(count: number, one: string, many: string): string {
   return `${String(count)} ${count === 1 ? one : many}`;
 }
+
+/** "A, B e C". */
+export function joinNames(names: readonly string[]): string {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} e ${names.at(-1) ?? ''}`;
+}

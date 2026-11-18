@@ -45,6 +45,15 @@ function Nominating({ cycle, closed }: { cycle: Cycle; closed: boolean }) {
   if (closed) {
     return <Line headline="Indicações encerradas" details={['A votação abre em breve.']} />;
   }
+  if (cycle.review !== null) {
+    return (
+      <Line
+        headline="Conferindo as indicações"
+        details={['Todos responderam. A votação abre depois da conferência.']}
+        action={<ElectionLink done label="Acompanhar" />}
+      />
+    );
+  }
 
   const answered = answer.status === 'ready' && answer.value !== null;
   const responses = peopleOutOf(cycle.responses, members, RESPONDED);

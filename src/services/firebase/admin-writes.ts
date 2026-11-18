@@ -60,6 +60,13 @@ export async function finishReading(db: Firestore, cycleId: CycleId) {
   });
 }
 
+export async function endEmptyRound(db: Firestore, cycleId: CycleId) {
+  await updateDoc(refs.cycle(db, cycleId), {
+    status: 'finished',
+    finishedAt: serverTimestamp(),
+  });
+}
+
 /** Emails must already be normalized (trimmed, lowercase). */
 export async function allowEmails(db: Firestore, emails: readonly string[]) {
   const batch = writeBatch(db);

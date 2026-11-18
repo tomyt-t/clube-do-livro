@@ -84,16 +84,22 @@ export function cycleData(overrides: Record<string, unknown> = {}) {
     readingStartedAt: null,
     finishedReaders: 0,
     finishedAt: null,
+    review: null,
+    merged: {},
+    letGo: [],
+    letGoAt: null,
+    flagged: [],
     ...overrides,
   };
 }
 
 export async function seedAllowlist(env: RulesTestEnvironment) {
   await withoutRules(env, async (db) => {
-    await setDoc(doc(db, 'allowlist', admin.email), { admin: true });
-    await setDoc(doc(db, 'allowlist', ana.email), {});
-    await setDoc(doc(db, 'allowlist', bia.email), {});
-    await setDoc(doc(db, 'allowlist', caio.email.toLowerCase()), {});
+    // Each seat already claimed by its member's account (see claimSeat).
+    await setDoc(doc(db, 'allowlist', admin.email), { admin: true, uid: admin.uid });
+    await setDoc(doc(db, 'allowlist', ana.email), { uid: ana.uid });
+    await setDoc(doc(db, 'allowlist', bia.email), { uid: bia.uid });
+    await setDoc(doc(db, 'allowlist', caio.email.toLowerCase()), { uid: caio.uid });
     await setDoc(doc(db, 'settings', 'club'), { members: MEMBER_COUNT });
   });
 }
@@ -105,6 +111,9 @@ export async function seedNominating(env: RulesTestEnvironment, cycle = {}) {
 }
 
 /** Everyone answered: ana, bia and admin nominated; caio passed. */
+/** The title key a seeded nomination is stored under. */
+export const titleKeyFor = (nominationId: NominationId) => `livro ${nominationId}`;
+
 export async function seedAnswered(env: RulesTestEnvironment, cycle = {}) {
   await seedAllowlist(env);
   await withoutRules(env, async (db) => {
@@ -120,7 +129,9 @@ export async function seedAnswered(env: RulesTestEnvironment, cycle = {}) {
     for (const [persona, nominationId] of nominators) {
       await setDoc(doc(db, 'cycles', CYCLE, 'nominations', nominationId), {
         book: bookFor(nominationId),
+        titleKey: titleKeyFor(nominationId),
       });
+      await setDoc(doc(db, 'cycles', CYCLE, 'titles', titleKeyFor(nominationId)), {});
       await setDoc(doc(db, 'cycles', CYCLE, 'answers', persona.uid), { nominationId });
     }
     await setDoc(doc(db, 'cycles', CYCLE, 'answers', caio.uid), { nominationId: null });

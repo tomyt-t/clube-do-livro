@@ -2,10 +2,14 @@ rules_version = '2';
 
 // Security model
 // --------------
-// * Only verified emails present in /allowlist can read or write anything.
+// * Only verified emails present in /allowlist can read or write anything,
+//   and only from the account that first claimed that entry (its seat): a
+//   second account for the same email would otherwise vote twice.
 // * Member data is bound to request.auth.uid and is create-only: answers,
 //   nominations and ballot receipts can never be edited or deleted, so nobody
-//   (including the admin) can change what another member sent.
+//   (including the admin) can change what another member sent. The one
+//   exception: a nomination the organizer lets go (two members nominated the
+//   same reading) leaves the list, and only its nominator may answer again.
 // * Votes are anonymous: a ballot is one batch that creates an empty receipt
 //   (who voted), bumps the cycle's ballot count and adds +1 to the chosen
 //   books in a tally (every choice to `votes`, the first one also to
@@ -22,7 +26,7 @@ rules_version = '2';
 // * Everything not explicitly allowed is denied.
 //
 // Limits shared with src/domain: book fields (book.ts), two choices per
-// ballot and 20 options (voting.ts). Rules have no loops, so list checks are
+// ballot and 16 options (voting.ts). Rules have no loops, so list checks are
 // unrolled, each slot guarded by the list's size.
 //
 // Firestore evaluates at most 1000 expressions per request, shared by every
@@ -46,8 +50,10 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email_verified == true;
     }
 
+    // The seat is the account that first used the entry (see claimsSeat). A
+    // missing entry fails the read, which denies the request.
     function isMember() {
-      return isVerified() && exists(allowlistEntry());
+      return isVerified() && get(allowlistEntry()).data.get('uid', '') == request.auth.uid;
     }
 
     function isAdmin() {
@@ -70,6 +76,10 @@ service cloud.firestore {
 
     function answerPath(c) {
       return /databases/$(database)/documents/cycles/$(c)/answers/$(request.auth.uid);
+    }
+
+    function titlePath(c, key) {
+      return /databases/$(database)/documents/cycles/$(c)/titles/$(key);
     }
 
     function tallyPath(c) {
@@ -150,18 +160,34 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------- allowlist
-    // Document id = lowercase email. Members can only check their own entry;
-    // only the admin can list or change entries, never their own.
+    // Document id = lowercase email. Members can only check their own entry
+    // and claim its seat, once; only the admin can list or change entries,
+    // never their own. The admin may free a seat (drop its account), never
+    // bind one to an account.
 
     match /allowlist/{address} {
       allow get: if isVerified() && address == email();
       allow list: if isAdmin();
-      allow create, update: if isAdmin() && address != email()
+      allow create: if isAdmin() && address != email()
         && address == address.lower()
         && address.matches('[^@ ]+@[^@ ]+[.][^@ ]+')
         && request.resource.data.keys().hasOnly(['admin'])
         && request.resource.data.get('admin', false) is bool;
+      // The organizer may change only the admin flag (a stale "add" of an
+      // existing email fails instead of freeing its seat). Freeing a seat is
+      // removing the email and adding it again.
+      allow update: if claimsSeat(address)
+        || (isAdmin() && address != email()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['admin'])
+          && request.resource.data.get('admin', false) is bool);
       allow delete: if isAdmin() && address != email();
+    }
+
+    function claimsSeat(address) {
+      return isVerified() && address == email()
+        && !('uid' in resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid;
     }
 
     // ---------------------------------------------------------------- members
@@ -197,24 +223,51 @@ service cloud.firestore {
         && (countsOwnPart(cycleId, resource.data, request.resource.data)
           || isFlowStep(cycleId, resource.data, request.resource.data)
           || (isAdmin() && isValidTransition(cycleId, resource.data, request.resource.data)));
-      // A cycle can be dropped only before any vote exists.
-      allow delete: if isAdmin() && resource.data.status == 'nominating';
+      // A cycle can be dropped only before anyone answered: its answers and
+      // titles would outlive it and lock members out of a new one.
+      allow delete: if isAdmin() && resource.data.status == 'nominating'
+        && resource.data.responses == 0 && resource.data.nominationIds.size() == 0
+        && resource.data.letGo.size() == 0;
 
       // ---------------------------------------------------------- answers
       // One per member and final: either a nomination id or null (passed).
+      // Replaced only by its member, once the organizer let its nomination go.
 
       match /answers/{uid} {
-        allow get: if isMember() && isSelf(uid);
-        allow create: if isMember() && isSelf(uid) && isNewAnswer(cycleId);
+        allow get: if isMember()
+          && (isSelf(uid) || (isAdmin() && isFlagged(cycleId, resource.data.nominationId)));
+        allow create, update: if isMember() && isSelf(uid) && isNewAnswer(cycleId);
       }
 
       // ------------------------------------------------------ nominations
       // Never stores who nominated. Created only together with the
-      // nominator's own answer pointing at it.
+      // nominator's own answer pointing at it. Hidden until the nomination
+      // call is over: before that, each member reads only their own.
 
       match /nominations/{nominationId} {
-        allow read: if isMember();
+        // A member whose nomination was let go sees the list (everyone saw it
+        // during the review), to choose again knowing what is on it.
+        allow get: if isMember()
+          && (isRevealed(cycleId) || isOwnNomination(cycleId, nominationId) || isLetGo(cycleId));
+        allow list: if isMember() && (isRevealed(cycleId) || isLetGo(cycleId));
         allow create: if isMember() && isNewNomination(cycleId, nominationId);
+        // Let go by the organizer, together with its title record.
+        allow delete: if isAdmin() && isUnlocking(cycleId, nominationId)
+          && !existsAfter(titlePath(cycleId, resource.data.titleKey));
+      }
+
+      // ----------------------------------------------------------- titles
+      // One per nominated title, by the key the app derives from it (case,
+      // accents and punctuation removed), so the same reading cannot be
+      // nominated twice. Anyone may check one title, to be told it is taken;
+      // nobody may list them, which would reveal the hidden nominations.
+      // Rules cannot normalize Unicode, so they check only the key's shape:
+      // a doctored app could nominate a twin, which everyone sees later.
+
+      match /titles/{key} {
+        allow get: if isMember();
+        allow create: if isMember() && isNewTitle(cycleId, key);
+        allow delete: if isAdmin() && isReopening(cycleId) && isLetGoTitle(cycleId, key);
       }
 
       // ---------------------------------------------------------- ballots
@@ -246,13 +299,27 @@ service cloud.firestore {
     // ------------------------------------------------------ nomination writes
     // Batch: answers/{uid} + cycles/{id}.responses (+1) [+ nominations/{id}]
 
+    // A member whose nomination was let go may answer again past the
+    // deadline: the vote waits for them (see startsVoting).
     function acceptsNominations(c) {
       let cycle = get(cyclePath(c)).data;
-      return cycle.status == 'nominating' && isBeforeDeadline(cycle.nominationDeadline);
+      return cycle.status == 'nominating' && cycle.review == null
+        && (isBeforeDeadline(cycle.nominationDeadline) || isLetGo(c));
     }
 
+    // The member's answer is new in this batch, or replaces (with a new one)
+    // one whose nomination the organizer let go.
     function isAnsweringNow(c) {
-      return !exists(answerPath(c)) && existsAfter(answerPath(c));
+      return existsAfter(answerPath(c)) && (!exists(answerPath(c))
+        || (isLetGo(c) && getAfter(answerPath(c)).data.nominationId
+          != get(answerPath(c)).data.nominationId));
+    }
+
+    // Let-go nominations wait in the cycle's letGo list until their members
+    // answer again.
+    function isLetGo(c) {
+      let before = get(answerPath(c)).data.nominationId;
+      return before != null && before in get(cyclePath(c)).data.letGo;
     }
 
     // A member's own answer, ballot or "Acabei de ler!", counted on the cycle.
@@ -262,11 +329,15 @@ service cloud.firestore {
         || (before.status == 'reading' && countsOwnFinish(c, before, after));
     }
 
+    // Answering again after a let-go also takes the old id off letGo.
     function countsOwnAnswer(c, before, after) {
-      return changesOnly(['responses', 'nominationIds'])
+      return changesOnly(['responses', 'nominationIds', 'letGo'])
         && after.responses == before.responses + 1
         && isAnsweringNow(c)
-        && listsOwnNomination(c, before.nominationIds, after.nominationIds);
+        && listsOwnNomination(c, before.nominationIds, after.nominationIds)
+        && after.letGo == (exists(answerPath(c))
+          ? before.letGo.removeAll([get(answerPath(c)).data.nominationId])
+          : before.letGo);
     }
 
     // A nomination also joins the cycle's list, in arrival order, while the
@@ -274,13 +345,14 @@ service cloud.firestore {
     function listsOwnNomination(c, before, after) {
       let nominated = getAfter(answerPath(c)).data.nominationId;
       return (nominated == null && after == before)
-        || (nominated != null && before.size() < 20 && after == before.concat([nominated]));
+        || (nominated != null && before.size() < 16 && after == before.concat([nominated]));
     }
 
     function isNewAnswer(c) {
       let answer = request.resource.data;
       return acceptsNominations(c)
         && hasExactly(answer, ['nominationId'])
+        && isAnsweringNow(c)
         && getAfter(cyclePath(c)).data.responses == get(cyclePath(c)).data.responses + 1
         && (answer.nominationId == null
           || (answer.nominationId is string
@@ -288,12 +360,47 @@ service cloud.firestore {
             && existsAfter(nominationPath(c, answer.nominationId))));
     }
 
+    // Ids are the app's random ones: a long id would not fit the field paths
+    // the tally and results use, and the winner could never be declared.
+    // It joins the list in the same batch, and never under a let-go id
+    // (which would take over that member's chance to answer again).
     function isNewNomination(c, n) {
-      return acceptsNominations(c)
-        && hasExactly(request.resource.data, ['book'])
+      let key = request.resource.data.titleKey;
+      return n.matches('[A-Za-z0-9]{20}')
+        && !(n in get(cyclePath(c)).data.letGo)
+        && getAfter(cyclePath(c)).data.nominationIds
+          == get(cyclePath(c)).data.nominationIds.concat([n])
+        && acceptsNominations(c)
+        && hasExactly(request.resource.data, ['book', 'titleKey'])
         && isBook(request.resource.data.book)
+        && isTitleKey(key)
+        && !exists(titlePath(c, key)) && existsAfter(titlePath(c, key))
         && isAnsweringNow(c)
         && getAfter(answerPath(c)).data.nominationId == n;
+    }
+
+    // Words of letters and digits, separated by single spaces (no slash).
+    function isTitleKey(key) {
+      return key is string && key.size() >= 1 && key.size() <= 200
+        && key.matches('[^ /]+( [^ /]+)*');
+    }
+
+    // Created with the nomination that carries this key, in the same batch.
+    function isNewTitle(c, key) {
+      return request.resource.data.keys().size() == 0
+        && isAnsweringNow(c)
+        && getAfter(nominationPath(c, getAfter(answerPath(c)).data.nominationId))
+          .data.titleKey == key;
+    }
+
+    // Revealed once everyone answered and the review began, or past nominations.
+    function isRevealed(c) {
+      let cycle = get(cyclePath(c)).data;
+      return cycle.status != 'nominating' || cycle.review != null;
+    }
+
+    function isOwnNomination(c, n) {
+      return get(answerPath(c)).data.nominationId == n;
     }
 
     // ------------------------------------------------------------ ballot writes
@@ -316,15 +423,19 @@ service cloud.firestore {
         && getAfter(tallyPath(c)).data != get(tallyPath(c)).data;
     }
 
-    // The member's own nomination, or '' (never a valid option id).
+    // The member's own nomination, or '' if they passed or never answered
+    // (never a valid option id).
     function ownNomination(c) {
-      return exists(answerPath(c)) ? get(answerPath(c)).data.nominationId : '';
+      let id = exists(answerPath(c)) ? get(answerPath(c)).data.nominationId : '';
+      return id == null ? '' : id;
     }
 
-    // Two choices, or fewer when there are not enough eligible books.
-    function requiredChoices(options, own) {
+    // Two choices (one if the member's nomination was merged), or fewer when
+    // there are not enough eligible books.
+    function requiredChoices(options, own, grouped) {
       let eligible = options.size() - (own in options ? 1 : 0);
-      return eligible < 2 ? eligible : 2;
+      let most = grouped ? 1 : 2;
+      return eligible < most ? eligible : most;
     }
 
     // Option i, if chosen, gains one vote, and its first-choice count either
@@ -348,27 +459,31 @@ service cloud.firestore {
         && (n < 9 || addsOneAt(o, s, 8)) && (n < 10 || addsOneAt(o, s, 9))
         && (n < 11 || addsOneAt(o, s, 10)) && (n < 12 || addsOneAt(o, s, 11))
         && (n < 13 || addsOneAt(o, s, 12)) && (n < 14 || addsOneAt(o, s, 13))
-        && (n < 15 || addsOneAt(o, s, 14)) && (n < 16 || addsOneAt(o, s, 15))
-        && (n < 17 || addsOneAt(o, s, 16)) && (n < 18 || addsOneAt(o, s, 17))
-        && (n < 19 || addsOneAt(o, s, 18)) && (n < 20 || addsOneAt(o, s, 19));
+        && (n < 15 || addsOneAt(o, s, 14)) && (n < 16 || addsOneAt(o, s, 15));
     }
 
     // The tally keeps exactly the ballot's options (it is created with them
     // and never gains or loses a key), so the changed keys are options.
+    // A member whose nomination was merged: it already counts as their first
+    // choice, on the ballot option it became.
     function isValidVote(c) {
       let cycle = get(cyclePath(c)).data;
       let votes = request.resource.data.votes.diff(resource.data.votes);
       let firsts = request.resource.data.firsts.diff(resource.data.firsts);
       let own = ownNomination(c);
+      let mine = cycle.merged.get(own, own);
+      let grouped = own in cycle.merged || cycle.merged.values().hasAny([own]);
       return cycle.status == 'voting'
         && hasExactly(request.resource.data, ['votes', 'firsts'])
         && votes.addedKeys().size() == 0 && votes.removedKeys().size() == 0
         && firsts.addedKeys().size() == 0 && firsts.removedKeys().size() == 0
-        && votes.changedKeys().size() == requiredChoices(cycle.options, own)
-        && !(own in votes.changedKeys())
-        // Exactly one first choice, and it is one of the books voted for.
-        && firsts.changedKeys().size() == 1
-        && firsts.changedKeys().difference(votes.changedKeys()).size() == 0
+        && votes.changedKeys().size() == requiredChoices(cycle.options, mine, grouped)
+        && !(mine in votes.changedKeys())
+        // One first choice among the books voted for; none if already counted.
+        && (grouped
+          ? firsts.changedKeys().size() == 0
+          : firsts.changedKeys().size() == 1
+            && firsts.changedKeys().difference(votes.changedKeys()).size() == 0)
         && addsOneEach(cycle.options, votes.changedKeys())
         && isVotingNow(c);
     }
@@ -398,8 +513,12 @@ service cloud.firestore {
     // fully checked, so anyone may do it as soon as the vote is closed.
 
     function isFlowStep(c, before, after) {
-      return (before.status == 'nominating' && after.options == before.nominationIds
-          && everyone(before.responses) && startsVoting(c, before, after))
+      return (before.status == 'nominating'
+          && (startsReview(before, after)
+            || recordsReview(before, after)
+            // Deadlines are the organizer's: the automatic open sets none.
+            || (isClearReview(before) && startsVoting(c, before, after)
+              && after.votingDeadline == null)))
         || (before.status == 'voting'
           && (before.options.size() == 1 || everyone(before.ballots))
           && closesVoting(before, after))
@@ -431,7 +550,8 @@ service cloud.firestore {
                                 'nominationDeadline', 'votingDeadline', 'createdAt',
                                 'options', 'ballots', 'votingOpenedAt', 'votingClosedAt',
                                 'results', 'winner', 'readingStartedAt', 'finishedReaders',
-                                'finishedAt'])
+                                'finishedAt', 'review', 'merged', 'letGo', 'letGoAt',
+                                'flagged'])
         && cycle.number is int && cycle.number >= 1
         && id == cycleIdFor(cycle.number)
         && cycle.status == 'nominating' && cycle.responses == 0
@@ -441,7 +561,9 @@ service cloud.firestore {
         && cycle.options == [] && cycle.ballots == 0
         && cycle.votingOpenedAt == null && cycle.votingClosedAt == null
         && cycle.results == null && cycle.winner == null
-        && cycle.readingStartedAt == null && cycle.finishedAt == null;
+        && cycle.readingStartedAt == null && cycle.finishedAt == null
+        && cycle.review == null && cycle.merged == {}
+        && cycle.letGo == [] && cycle.letGoAt == null && cycle.flagged == [];
     }
 
     function editsDeadline(before, after) {
@@ -452,37 +574,213 @@ service cloud.firestore {
     }
 
     function hasDistinctOptions(options) {
-      return options is list && options.size() >= 1 && options.size() <= 20
+      return options is list && options.size() >= 1 && options.size() <= 16
         && options.toSet().size() == options.size();
     }
 
-    // Batch: cycles/{id} (to voting, with the ballot's options) + tally (all zero)
+    // Batch: cycles/{id} (to voting, with the ballot's options) + tally (at
+    // zero, merged readings ahead). The ballot is every nomination left after
+    // merges, in arrival order, whoever opens the vote: nobody's nomination
+    // can be left out. Members whose nominations were let go get three days
+    // to answer again before anyone (the organizer included) can open it.
     function startsVoting(c, before, after) {
       return before.status == 'nominating' && after.status == 'voting'
+        && (before.letGo.size() == 0 || request.time > before.letGoAt + duration.value(3, 'd'))
         && changesOnly(['status', 'options', 'ballots', 'votingOpenedAt', 'votingDeadline'])
         && hasDistinctOptions(after.options)
-        && after.options.size() <= before.responses
+        && after.options == before.nominationIds.removeAll(before.merged.keys())
         && after.ballots == 0
         && after.votingOpenedAt == request.time
         && isOptionalTime(after.votingDeadline)
         && !exists(tallyPath(c)) && existsAfter(tallyPath(c));
     }
 
-    function isZeroed(tally, options) {
-      return tally is map
-        && tally.keys().hasAll(options) && tally.keys().hasOnly(options)
-        && tally.values().hasOnly([0]);
+    // How many times `value` is in a list (no loop needed).
+    function countIn(values, value) {
+      return values.size() - values.removeAll([value]).size();
     }
 
-    // Only together with the cycle opening its vote.
+    // Merge i: the reading it was merged into starts with one vote per
+    // member who nominated it (its own nominator and every merged one).
+    function startsAheadAt(v, targets, i) {
+      return i >= targets.size() || v[targets[i]] == 1 + countIn(targets, targets[i]);
+    }
+
+    // Every option at zero except merged readings, at their head start.
+    // Every merge target is checked, and only as many options as there are
+    // distinct targets are above zero, so no other option can be.
+    function isOpeningCount(v, options, merged) {
+      let targets = merged.values();
+      return v is map && v.keys().hasAll(options) && v.keys().hasOnly(options)
+        && v.values().removeAll([0]).size() == targets.toSet().size()
+        && startsAheadAt(v, targets, 0) && startsAheadAt(v, targets, 1)
+        && startsAheadAt(v, targets, 2) && startsAheadAt(v, targets, 3)
+        && startsAheadAt(v, targets, 4) && startsAheadAt(v, targets, 5)
+        && startsAheadAt(v, targets, 6) && startsAheadAt(v, targets, 7);
+    }
+
+    // Only together with the cycle opening its vote. Head-start votes are
+    // first choices too.
     function isNewTally(c) {
-      let options = getAfter(cyclePath(c)).data.options;
+      let cycle = getAfter(cyclePath(c)).data;
       let tally = request.resource.data;
       return get(cyclePath(c)).data.status == 'nominating'
-        && getAfter(cyclePath(c)).data.status == 'voting'
+        && cycle.status == 'voting'
         && hasExactly(tally, ['votes', 'firsts'])
-        && isZeroed(tally.votes, options)
-        && isZeroed(tally.firsts, options);
+        && tally.firsts == tally.votes
+        && isOpeningCount(tally.votes, cycle.options, cycle.merged);
+    }
+
+    // ---------------------------------------------------- the review
+    // Once everyone answered, the list opens and is checked for readings
+    // nominated twice. Stored as { ids, groups }: every flagged id (null
+    // while the check runs) and the groups, with why, for the organizer.
+
+    // Only once everyone answered, and nobody let go is still choosing again:
+    // it reveals the list (even to the organizer) and closes nominations.
+    function startsReview(before, after) {
+      return before.status == 'nominating' && before.review == null
+        && before.nominationIds.size() > 0 && before.letGo.size() == 0
+        && everyone(before.responses)
+        && changesOnly(['review'])
+        && after.review == { 'ids': null, 'groups': [] };
+    }
+
+    // A conflict group: two or three flagged readings, and why.
+    function isGroup(g, ids) {
+      return g is map && hasExactly(g, ['ids', 'reason'])
+        && g.ids is list && g.ids.size() >= 2 && g.ids.size() <= 3
+        && ids.hasAll(g.ids)
+        && isText(g.reason, 0, 200);
+    }
+
+    function idsOf(groups, i) {
+      return i < groups.size() ? groups[i].ids : [];
+    }
+
+    // Every flagged id is in exactly one group, at most three groups.
+    function isReviewData(review, nominationIds) {
+      let ids = review.ids;
+      let groups = review.groups;
+      return review is map && hasExactly(review, ['ids', 'groups'])
+        && ids is list && ids.hasOnly(nominationIds)
+        && ids.toSet().size() == ids.size()
+        && groups is list && groups.size() <= 3
+        && (groups.size() < 1 || isGroup(groups[0], ids))
+        && (groups.size() < 2 || isGroup(groups[1], ids))
+        && (groups.size() < 3 || isGroup(groups[2], ids))
+        && ids.size() == idsOf(groups, 0).size() + idsOf(groups, 1).size()
+          + idsOf(groups, 2).size()
+        && ids.toSet() == idsOf(groups, 0).toSet().union(idsOf(groups, 1).toSet())
+          .union(idsOf(groups, 2).toSet());
+    }
+
+    // What the check found, recorded once. Anyone may record that it found
+    // nothing; only the organizer may record flags (they reveal nominators to
+    // the organizer alone). Readings already merged are not checked again.
+    // Every reading flagged in the round is kept in `flagged`: no more than
+    // one pair, or half the list, over the whole round, so a check that flags
+    // much (or again and again) is not believed.
+    function recordsReview(before, after) {
+      return before.status == 'nominating' && before.review != null
+        && before.review.ids == null
+        && changesOnly(['review', 'flagged'])
+        && isReviewData(after.review, before.nominationIds)
+        && !after.review.ids.hasAny(before.merged.keys())
+        && (after.review.ids.size() == 0 || isAdmin())
+        && after.flagged == before.flagged.concat(after.review.ids.removeAll(before.flagged))
+        && (after.flagged.size() <= 2 || after.flagged.size() * 2 <= before.nominationIds.size());
+    }
+
+    function isClearReview(cycle) {
+      return cycle.review != null && cycle.review.ids == [];
+    }
+
+    // Merges point from a nomination to another that stays on the ballot.
+    function isMerge(merged, nominationIds) {
+      return merged is map && merged.size() <= 8
+        && merged.keys().hasOnly(nominationIds) && merged.values().hasOnly(nominationIds)
+        && !merged.keys().hasAny(merged.values());
+    }
+
+    // Merging one flagged group (r): all its readings but one now point at
+    // the one kept on the ballot; no other merge changes.
+    function mergesGroup(b, a, r) {
+      let added = a.diff(b);
+      let kept = a.get(r[0], r[0]);
+      return r.size() >= 2 && r.size() <= 3
+        && added.changedKeys().size() == 0 && added.removedKeys().size() == 0
+        && added.addedKeys().size() == r.size() - 1
+        && added.addedKeys().difference(r.toSet()).size() == 0
+        && kept in r && !(kept in a)
+        && a.get(r[1], r[1]) == kept
+        && (r.size() < 3 || a.get(r[2], r[2]) == kept);
+    }
+
+    // The organizer, once the check is recorded: dismiss flagged groups, or
+    // merge one into a single reading. Nothing new can be flagged.
+    function editsReview(before, after) {
+      return before.status == 'nominating' && before.review != null
+        && before.review.ids != null
+        && changesOnly(['review', 'merged'])
+        && isReviewData(after.review, before.nominationIds)
+        && after.review.ids.hasOnly(before.review.ids)
+        && before.review.groups.hasAll(after.review.groups)
+        && (after.merged == before.merged
+          || (isMerge(after.merged, before.nominationIds)
+            && mergesGroup(before.merged, after.merged,
+              before.review.ids.removeAll(after.review.ids))));
+    }
+
+    // The organizer lets flagged readings go, so their nominators can
+    // nominate again: the nominations and their title records are deleted,
+    // they leave the list (which keeps its order), the count drops and the
+    // review starts over once everyone answered again. Their answers stay;
+    // only their members can replace them. Merged readings stay.
+    function reopensNominations(c, before, after) {
+      let removed = before.nominationIds.removeAll(after.nominationIds);
+      return before.status == 'nominating' && before.review != null
+        && before.review.ids != null
+        && changesOnly(['review', 'responses', 'nominationIds', 'letGo', 'letGoAt'])
+        && after.review == null
+        && after.letGo == before.letGo.concat(removed)
+        && after.letGoAt == request.time
+        && after.nominationIds == before.nominationIds.removeAll(removed)
+        && removed.size() >= 1 && removed.size() <= 3
+        && removed.hasOnly(before.review.ids)
+        && !removed.hasAny(before.merged.keys()) && !removed.hasAny(before.merged.values())
+        && after.responses == before.responses - removed.size()
+        && !existsAfter(nominationPath(c, removed[0]))
+        && (removed.size() < 2 || !existsAfter(nominationPath(c, removed[1])))
+        && (removed.size() < 3 || !existsAfter(nominationPath(c, removed[2])));
+    }
+
+    // A flagged reading, while its review is open.
+    function isFlagged(c, n) {
+      let cycle = get(cyclePath(c)).data;
+      return cycle.status == 'nominating' && cycle.review != null
+        && cycle.review.ids != null && n in cycle.review.ids;
+    }
+
+    // In the batch that reopens nominations, a reading leaving the list.
+    function isUnlocking(c, n) {
+      return isFlagged(c, n) && isReopening(c)
+        && !(n in getAfter(cyclePath(c)).data.nominationIds);
+    }
+
+    function isReopening(c) {
+      return get(cyclePath(c)).data.review != null
+        && getAfter(cyclePath(c)).data.review == null
+        && getAfter(cyclePath(c)).data.status == 'nominating';
+    }
+
+    // The title record of a nomination leaving the list in this batch.
+    function isLetGoTitle(c, key) {
+      let removed = get(cyclePath(c)).data.nominationIds
+        .removeAll(getAfter(cyclePath(c)).data.nominationIds);
+      return (removed.size() > 0 && get(nominationPath(c, removed[0])).data.titleKey == key)
+        || (removed.size() > 1 && get(nominationPath(c, removed[1])).data.titleKey == key)
+        || (removed.size() > 2 && get(nominationPath(c, removed[2])).data.titleKey == key);
     }
 
     function closesVoting(before, after) {
@@ -522,11 +820,7 @@ service cloud.firestore {
         && (n < 13 || (o[12] in d ? v[o[12]] * M + f[o[12]] == top : v[o[12]] * M + f[o[12]] < top))
         && (n < 14 || (o[13] in d ? v[o[13]] * M + f[o[13]] == top : v[o[13]] * M + f[o[13]] < top))
         && (n < 15 || (o[14] in d ? v[o[14]] * M + f[o[14]] == top : v[o[14]] * M + f[o[14]] < top))
-        && (n < 16 || (o[15] in d ? v[o[15]] * M + f[o[15]] == top : v[o[15]] * M + f[o[15]] < top))
-        && (n < 17 || (o[16] in d ? v[o[16]] * M + f[o[16]] == top : v[o[16]] * M + f[o[16]] < top))
-        && (n < 18 || (o[17] in d ? v[o[17]] * M + f[o[17]] == top : v[o[17]] * M + f[o[17]] < top))
-        && (n < 19 || (o[18] in d ? v[o[18]] * M + f[o[18]] == top : v[o[18]] * M + f[o[18]] < top))
-        && (n < 20 || (o[19] in d ? v[o[19]] * M + f[o[19]] == top : v[o[19]] * M + f[o[19]] < top));
+        && (n < 16 || (o[15] in d ? v[o[15]] * M + f[o[15]] == top : v[o[15]] * M + f[o[15]] < top));
     }
 
     // The pseudo-random number a closing time gives (0 to 32767): a linear
@@ -566,13 +860,23 @@ service cloud.firestore {
         || (m == 'draw' && isFairDraw(o, r, w, d, closedAt));
     }
 
+    // Whether the round before is still being read (or waiting to be): the
+    // winner then waits as the upcoming reading (src/domain/cycle.ts decides
+    // the same way). An upcoming reading is started by the organizer.
+    function waitsForPrevious(before) {
+      let previous = cyclePath(cycleIdFor(before.number - 1));
+      return exists(previous) && get(previous).data.status in ['reading', 'upcoming'];
+    }
+
     // Results must be the tally itself; the winner must follow the rule.
     function declaresWinner(c, before, after) {
       let winner = after.winner;
       return before.status == 'tallying'
         && changesOnly(['status', 'winner', 'results', 'readingStartedAt'])
-        && ((after.status == 'reading' && after.readingStartedAt == request.time)
-          || (after.status == 'upcoming' && after.readingStartedAt == null))
+        && ((after.status == 'reading' && after.readingStartedAt == request.time
+            && !waitsForPrevious(before))
+          || (after.status == 'upcoming' && after.readingStartedAt == null
+            && waitsForPrevious(before)))
         && after.results == get(tallyPath(c)).data
         && winner is map
         && hasExactly(winner, ['nominationId', 'book', 'method', 'decidedAt', 'drawnFrom'])
@@ -580,6 +884,19 @@ service cloud.firestore {
         && winner.nominationId in before.options
         && winner.book == get(nominationPath(c, winner.nominationId)).data.book
         && isEarnedWin(before.options, after.results, winner, before.votingClosedAt);
+    }
+
+    // A round nobody nominated in (everyone passed, or the deadline is over)
+    // can only end: there is nothing to vote on. The organizer opens the next.
+    // Members let go get their three days to nominate again first.
+    function endsEmptyRound(before, after) {
+      return before.status == 'nominating' && after.status == 'finished'
+        && before.nominationIds.size() == 0
+        && (before.letGo.size() == 0 || request.time > before.letGoAt + duration.value(3, 'd'))
+        && (everyone(before.responses)
+          || (before.nominationDeadline != null && request.time > before.nominationDeadline))
+        && changesOnly(['status', 'finishedAt'])
+        && after.finishedAt == request.time;
     }
 
     function startsReading(before, after) {
@@ -598,6 +915,10 @@ service cloud.firestore {
     // move the chosen reading along. Declaring the winner is a flow step.
     function isValidTransition(c, before, after) {
       return editsDeadline(before, after)
+        || startsReview(before, after)
+        || editsReview(before, after)
+        || reopensNominations(c, before, after)
+        || endsEmptyRound(before, after)
         || startsVoting(c, before, after)
         || closesVoting(before, after)
         || startsReading(before, after)

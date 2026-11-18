@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ClubSettings } from '@/domain/types';
 import { createDemoBackend, createDemoState, type DemoScenario } from '@/services/demo';
-import { emptyClub, firstValue } from '@/test/backend';
+import { cycleOf, emptyClub, firstValue } from '@/test/backend';
 import { renderAsMember } from '@/test/render';
 
 import { AdminPage } from './AdminPage';
@@ -123,5 +123,22 @@ describe('AdminPage, the round', () => {
     await user.click(await screen.findByRole('button', { name: 'Encerrar a leitura agora' }));
     await confirm(user, 'Encerrar a leitura sem esperar todos?', 'Encerrar a leitura agora');
     expect(await screen.findByText('Rodada 4: indicações abertas')).toBeInTheDocument();
+  });
+});
+
+describe('AdminPage, a round nobody nominated in', () => {
+  it('ends it once everyone passed, leaving the next round to open', async () => {
+    const state = createDemoState(new Date(), 'nominating');
+    const cycle = state.cycles['ciclo-4'];
+    if (!cycle) throw new Error('Sem a rodada 4');
+    Object.assign(cycle, { responses: 6, nominationIds: [] });
+    state.nominations['ciclo-4'] = [];
+    const backend = createDemoBackend({ state });
+    const { user } = renderAsMember(<AdminPage />, 'marina', { backend });
+
+    await user.click(await screen.findByRole('button', { name: 'Encerrar a rodada' }));
+    const dialog = screen.getByRole('dialog', { name: 'Encerrar a rodada sem leitura?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Encerrar a rodada' }));
+    expect((await cycleOf(backend, 'ciclo-4')).status).toBe('finished');
   });
 });

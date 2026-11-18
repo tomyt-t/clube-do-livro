@@ -12,10 +12,11 @@ export function useCastBallot(cycleId: CycleId, uid: MemberId) {
     error: null,
   });
 
-  const cast = async (choices: readonly NominationId[]) => {
+  /** `countsFirst` false: the member's merged nomination already is their first choice. */
+  const cast = async (choices: readonly NominationId[], countsFirst = true) => {
     setState({ busy: true, error: null });
     try {
-      await club.castBallot({ cycleId, uid, choices });
+      await club.castBallot({ cycleId, uid, choices, countsFirst });
       setState({ busy: false, error: null });
     } catch (error) {
       setState({ busy: false, error: describeError(error) });

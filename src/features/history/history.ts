@@ -58,11 +58,7 @@ export function readingPeriod(cycle: Cycle): string {
   return `Lida de ${start} a ${formatDay(cycle.finishedAt)}`;
 }
 
-/** "A, B e C". */
-export function joinNames(names: readonly string[]): string {
-  if (names.length <= 1) return names.join('');
-  return `${names.slice(0, -1).join(', ')} e ${names.at(-1) ?? ''}`;
-}
+export { joinNames } from '@/ui/format';
 
 /** "21:03:12,004": the closing time down to the millisecond that fixed the draw. */
 export function formatClosingTime(date: Date): string {

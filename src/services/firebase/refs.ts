@@ -23,6 +23,9 @@ export const refs = {
 
   answer: (db: Firestore, cycleId: CycleId, uid: MemberId) =>
     doc(db, 'cycles', cycleId, 'answers', uid),
+  /** One per nominated title, by its `titleKey`: what blocks a second nomination of it. */
+  title: (db: Firestore, cycleId: CycleId, key: string) =>
+    doc(db, 'cycles', cycleId, 'titles', key),
 
   tally: (db: Firestore, cycleId: CycleId) => doc(db, 'cycles', cycleId, 'tally', 'counts'),
   receipt: (db: Firestore, cycleId: CycleId, uid: MemberId) =>

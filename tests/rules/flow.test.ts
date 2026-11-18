@@ -2,6 +2,7 @@ import { assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-
 import { doc, getDoc, type Timestamp } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 
+import { openingResults } from '@/domain/review';
 import { decide } from '@/domain/tally';
 import type { Book, NominationId } from '@/domain/types';
 import { openCycle } from '@/services/firebase/admin-writes';
@@ -55,7 +56,14 @@ it('runs a full cycle from nominations to the winner', async () => {
   await answerNominationCall(dbAs(env, caio), { cycleId, uid: caio.uid, answer: { kind: 'pass' } });
 
   const options = [fromAna, fromBia, fromAdmin];
-  await assertSucceeds(startVoting(adminDb, { cycleId, options, votingDeadline: null }));
+  await assertSucceeds(
+    startVoting(adminDb, {
+      cycleId,
+      options,
+      opening: openingResults(options, {}),
+      votingDeadline: null,
+    }),
+  );
 
   const vote = (persona: Persona, choices: NominationId[]) =>
     assertSucceeds(castBallot(dbAs(env, persona), { cycleId, uid: persona.uid, choices }));

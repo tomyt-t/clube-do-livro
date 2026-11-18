@@ -87,6 +87,11 @@ function pastCycle(now: Date, past: PastCycle): Cycle {
     readingStartedAt: decidedAt,
     finishedReaders: past.finishedDaysAgo === null ? 0 : 6,
     finishedAt: past.finishedDaysAgo === null ? null : daysAgo(now, past.finishedDaysAgo),
+    review: { conflicts: [] },
+    merged: {},
+    letGo: [],
+    letGoAt: null,
+    flagged: [],
   };
 }
 

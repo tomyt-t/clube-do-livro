@@ -1,3 +1,4 @@
+import { titleKey } from './title-key';
 import type { Book, SynopsisSource } from './types';
 
 /** Field limits. `firestore.rules` enforces the same numbers server-side. */
@@ -96,7 +97,8 @@ function synopsisErrors({ synopsis, synopsisSource }: Book): BookError[] {
 
 export function validateBook(book: Book): BookError[] {
   const errors: BookError[] = [];
-  if (book.title.length === 0) errors.push('title-missing');
+  // A title with no letter or digit has no key to tell it apart from others.
+  if (titleKey(book.title) === '') errors.push('title-missing');
   if (book.title.length > BOOK_LIMITS.title) errors.push('title-too-long');
   return [...errors, ...synopsisErrors(book), ...linkErrors(book)];
 }

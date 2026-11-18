@@ -48,12 +48,15 @@ describe('cycle selectors', () => {
 });
 
 describe('statusAfterDecision', () => {
-  it('starts reading right away when nothing is being read', () => {
-    expect(statusAfterDecision([finishedOne])).toBe('reading');
+  it('starts reading right away when the round before is over', () => {
+    expect(statusAfterDecision([finishedOne], { number: 2 })).toBe('reading');
+    expect(statusAfterDecision([], { number: 1 })).toBe('reading');
   });
 
-  it('queues the book when another one is being read', () => {
-    expect(statusAfterDecision([reading])).toBe('upcoming');
+  it('queues the book while the round before is being read, or waits its turn', () => {
+    expect(statusAfterDecision([reading], { number: 4 })).toBe('upcoming');
+    const waiting = makeCycle({ number: 4, status: 'upcoming' });
+    expect(statusAfterDecision([reading, waiting], { number: 5 })).toBe('upcoming');
   });
 });
 

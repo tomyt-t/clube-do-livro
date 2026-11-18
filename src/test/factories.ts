@@ -31,6 +31,11 @@ export function makeCycle(overrides: Partial<Cycle> = {}): Cycle {
     readingStartedAt: null,
     finishedReaders: 0,
     finishedAt: null,
+    review: null,
+    merged: {},
+    letGo: [],
+    letGoAt: null,
+    flagged: [],
     ...overrides,
   };
 }

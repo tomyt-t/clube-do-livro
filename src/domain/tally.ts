@@ -23,15 +23,23 @@ export function emptyResults(options: readonly NominationId[]): VoteResults {
   return { votes: { ...zeros }, firsts: { ...zeros } };
 }
 
-/** Adds one ballot to the results: every choice is a vote, the first is also a first choice. */
-export function addBallot(results: VoteResults, choices: RankedChoices): VoteResults {
+/**
+ * Adds one ballot to the results: every choice is a vote, the first is also a
+ * first choice, unless the member's first choice is already counted (their
+ * nomination was merged with an equal one).
+ */
+export function addBallot(
+  results: VoteResults,
+  choices: RankedChoices,
+  countsFirst = true,
+): VoteResults {
   const [first] = choices;
   const votes = { ...results.votes };
   const firsts = { ...results.firsts };
   choices.forEach((choice) => {
     votes[choice] = count(votes, choice) + 1;
   });
-  if (first !== undefined) firsts[first] = count(firsts, first) + 1;
+  if (countsFirst && first !== undefined) firsts[first] = count(firsts, first) + 1;
   return { votes, firsts };
 }
 

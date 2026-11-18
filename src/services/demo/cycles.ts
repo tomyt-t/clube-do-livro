@@ -20,5 +20,10 @@ export function newDemoCycle(id: CycleId, number: number, nominationDeadline: Da
     readingStartedAt: null,
     finishedReaders: 0,
     finishedAt: null,
+    review: null,
+    merged: {},
+    letGo: [],
+    letGoAt: null,
+    flagged: [],
   };
 }

@@ -28,6 +28,13 @@ export const DEMO_BOOKS = {
     'Dom_Casmurro',
     'Já velho, Bento Santiago reconta o amor de juventude por Capitu e a desconfiança que tomou o casamento. Quem lê decide até onde acreditar nele.',
   ),
+  /** The same book as `dom`, typed by someone else: the review flags them. */
+  casmurro: book(
+    'Dom Casmurro',
+    647501,
+    'Dom_Casmurro',
+    'Já velho, Bento Santiago reconta o amor de juventude por Capitu e a desconfiança que tomou o casamento. Quem lê decide até onde acreditar nele.',
+  ),
   vidas: book(
     'Vidas Secas, Graciliano Ramos',
     12369687,

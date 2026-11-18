@@ -17,6 +17,12 @@ export type AppConfig =
       firebase: FirebaseConfig;
       /** reCAPTCHA v3 site key; enables Firebase App Check when present. */
       appCheckSiteKey: string | null;
+      /**
+       * Gemini model for the duplicate check (Firebase AI Logic). AI Logic does
+       * not know the allowlist, so the check runs only with App Check too;
+       * otherwise anyone could spend the quota with the public config.
+       */
+      aiModel: string | null;
     });
 
 export class ConfigError extends Error {
@@ -37,7 +43,8 @@ type EnvKey =
   | 'VITE_FIREBASE_PROJECT_ID'
   | 'VITE_FIREBASE_APP_ID'
   | 'VITE_GOOGLE_BOOKS_API_KEY'
-  | 'VITE_APPCHECK_SITE_KEY';
+  | 'VITE_APPCHECK_SITE_KEY'
+  | 'VITE_AI_MODEL';
 
 export type EnvSource = Partial<Record<EnvKey, string>>;
 
@@ -73,11 +80,13 @@ export function readConfig(env: EnvSource = import.meta.env): AppConfig {
     googleBooksApiKey: optional(env.VITE_GOOGLE_BOOKS_API_KEY),
   };
   if (env.VITE_DEMO_MODE === 'true') return { ...shared, mode: 'demo' };
+  const appCheckSiteKey = optional(env.VITE_APPCHECK_SITE_KEY);
 
   return {
     ...shared,
     mode: 'firebase',
     firebase: readFirebase(env),
-    appCheckSiteKey: optional(env.VITE_APPCHECK_SITE_KEY),
+    appCheckSiteKey,
+    aiModel: appCheckSiteKey ? optional(env.VITE_AI_MODEL) : null,
   };
 }

@@ -1,6 +1,12 @@
 import { Timestamp } from 'firebase/firestore';
 
 import { SYNOPSIS_SOURCES } from '@/domain/book';
+import {
+  MAX_CONFLICT_GROUPS,
+  MAX_GROUP_SIZE,
+  type CycleReview,
+  type Merged,
+} from '@/domain/review';
 import type {
   Book,
   ClubSettings,
@@ -66,6 +72,28 @@ function toTally(value: unknown): Tally | null {
   return Object.fromEntries(Object.entries(value).map(([key, votes]) => [key, count(votes)]));
 }
 
+/** Stored as `{ ids, groups }`: `ids` (every flagged id) is null while the check runs. */
+export function toReview(value: unknown): CycleReview | null {
+  if (!isRecord(value)) return null;
+  if (value.ids === null) return { conflicts: null };
+  const groups = Array.isArray(value.groups) ? value.groups.filter(isRecord) : [];
+  return {
+    conflicts: groups.slice(0, MAX_CONFLICT_GROUPS).map((group) => ({
+      ids: textList(group.ids).slice(0, MAX_GROUP_SIZE),
+      reason: typeof group.reason === 'string' ? group.reason.slice(0, 200) : '',
+    })),
+  };
+}
+
+export function toMerged(value: unknown): Merged {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  );
+}
+
 export function toResults(value: unknown): VoteResults | null {
   if (!isRecord(value)) return null;
   const votes = toTally(value.votes);
@@ -117,6 +145,11 @@ export function toCycle(id: string, data: Data): Cycle | null {
     readingStartedAt: dateOrNull(data.readingStartedAt),
     finishedReaders: count(data.finishedReaders),
     finishedAt: dateOrNull(data.finishedAt),
+    review: toReview(data.review),
+    merged: toMerged(data.merged),
+    letGo: textList(data.letGo),
+    letGoAt: dateOrNull(data.letGoAt),
+    flagged: textList(data.flagged),
   };
 }
 

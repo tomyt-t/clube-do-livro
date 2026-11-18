@@ -4,6 +4,7 @@ import { PATHS } from '@/app/paths';
 import { useMember } from '@/features/auth/session';
 import { Page } from '@/ui/Page';
 
+import { ConflictsPanel } from './ConflictsPanel';
 import { MembersPanel } from './MembersPanel';
 import { RoundPanel } from './RoundPanel';
 
@@ -12,8 +13,9 @@ export function AdminPage() {
   const { isAdmin } = useMember();
   if (!isAdmin) return <Navigate to={PATHS.reading} replace />;
   return (
-    <Page title="Organizar" width="roomy">
+    <Page title="Organizar">
       <RoundPanel />
+      <ConflictsPanel />
       <MembersPanel />
     </Page>
   );

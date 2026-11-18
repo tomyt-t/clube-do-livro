@@ -1,4 +1,5 @@
 import { findActiveElection, findCurrentReading, findUpcoming } from './cycle';
+import { isReviewClear } from './review';
 import type { Cycle, CycleStatus } from './types';
 
 /**
@@ -6,7 +7,11 @@ import type { Cycle, CycleStatus } from './types';
  * club agrees on dates, "everyone" means every member on the allowlist.
  */
 export type FlowStep =
-  /** Everyone answered and someone nominated: the vote opens. */
+  /** Everyone answered and someone nominated: the list opens for the check. */
+  | { kind: 'start-review'; cycle: Cycle }
+  /** The list is open: look for readings nominated twice and record what was found. */
+  | { kind: 'check'; cycle: Cycle }
+  /** The check found nothing to sort out (or the organizer sorted it out): the vote opens. */
   | { kind: 'open-voting'; cycle: Cycle }
   /** Everyone voted (or there was a single nomination): the vote closes. */
   | { kind: 'close-voting'; cycle: Cycle }
@@ -21,12 +26,23 @@ export function everyone(count: number, members: number): boolean {
 
 type StepFor = (cycle: Cycle, members: number) => FlowStep | null;
 
+/**
+ * Nominations: once everyone answered, open the list and check it; if the
+ * check found nothing, open the vote. Flagged readings wait for the organizer.
+ */
+function nominationStep(cycle: Cycle, members: number): FlowStep | null {
+  if (cycle.review === null) {
+    // Nobody let go may still be choosing again (see `isLetGo`).
+    const ready = everyone(cycle.responses, members) && cycle.letGo.length === 0;
+    return ready && cycle.nominationIds.length > 0 ? { kind: 'start-review', cycle } : null;
+  }
+  if (cycle.review.conflicts === null) return { kind: 'check', cycle };
+  return isReviewClear(cycle.review) ? { kind: 'open-voting', cycle } : null;
+}
+
 /** For each election status, the step that becomes ready, if any. */
 const ELECTION_STEPS: Partial<Record<CycleStatus, StepFor>> = {
-  nominating: (cycle, members) =>
-    everyone(cycle.responses, members) && cycle.nominationIds.length > 0
-      ? { kind: 'open-voting', cycle }
-      : null,
+  nominating: nominationStep,
   voting: (cycle, members) =>
     everyone(cycle.ballots, members) || cycle.options.length === 1
       ? { kind: 'close-voting', cycle }

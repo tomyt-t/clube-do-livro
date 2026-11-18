@@ -1,7 +1,23 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { Page } from './Page';
+import { Page, PageSide } from './Page';
+
+function matchWide(wide: boolean) {
+  vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string) =>
+      ({
+        matches: wide,
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList,
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('Page', () => {
   it('has one level-one title and its content', () => {
@@ -18,21 +34,46 @@ describe('Page', () => {
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
-  it('can leave the art out', () => {
-    const { container } = render(
-      <Page title="Entrar" art={false}>
-        conteúdo
-      </Page>,
-    );
-    expect(container.querySelector('img')).toBeNull();
-  });
-
-  it('can hide the title visually while keeping it for screen readers', () => {
+  it('can keep the title for screen readers only on phones', () => {
     render(
-      <Page title="Lendo agora" hideTitle>
+      <Page title="Lendo agora" titleOnPhones={false}>
         conteúdo
       </Page>,
     );
     expect(screen.getByRole('heading', { level: 1, name: 'Lendo agora' })).toBeInTheDocument();
+  });
+
+  it('leaves sidebar parts where they are written on phones', () => {
+    matchWide(false);
+    render(
+      <Page title="Votação">
+        <p>antes</p>
+        <PageSide>
+          <p>etapas</p>
+        </PageSide>
+        <p>depois</p>
+      </Page>,
+    );
+    const order = screen.getAllByText(/antes|etapas|depois/).map((p) => p.textContent);
+    expect(order).toEqual(['antes', 'etapas', 'depois']);
+  });
+
+  it('moves sidebar parts under the title on desktop, in the order they render', () => {
+    matchWide(true);
+    render(
+      <Page title="Votação">
+        <PageSide>
+          <p>etapas</p>
+        </PageSide>
+        <p>lista</p>
+        <PageSide>
+          <p>resumo</p>
+        </PageSide>
+      </Page>,
+    );
+    const title = screen.getByRole('heading', { level: 1 });
+    const side = title.parentElement;
+    expect(side?.textContent).toContain('etapasresumo');
+    expect(side?.textContent).not.toContain('lista');
   });
 });

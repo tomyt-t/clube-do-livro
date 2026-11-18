@@ -21,7 +21,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
     case 'needs-email':
       return <ConfirmLinkEmail />;
     case 'denied':
-      return <AccessDenied email={state.user.email} />;
+      return <AccessDenied email={state.user.email} taken={state.taken} />;
     case 'error':
       return <AccessCheckFailed />;
     case 'member':

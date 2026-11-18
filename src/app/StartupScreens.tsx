@@ -38,3 +38,18 @@ export function StartupError({ error }: { error: unknown }) {
     </div>
   );
 }
+
+/** Shown instead of the club inside another site's frame. */
+export function Framed() {
+  return (
+    <div className={styles.error} role="alert">
+      <h1>Abra o clube no endereço dele</h1>
+      <p>
+        Por segurança, o clube não abre dentro de outro site.{' '}
+        <a href={window.location.href} target="_top" rel="noopener noreferrer">
+          Abrir o clube
+        </a>
+      </p>
+    </div>
+  );
+}

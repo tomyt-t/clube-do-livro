@@ -16,13 +16,14 @@ html {
 }
 
 /*
- * Desktop: the whole interface a touch larger. Every size is in rem, so this
- * scales text, spacing and controls together (breakpoints stay put: media
- * queries measure rem from the browser's default, not from this).
+ * Desktop: the whole interface grows a little with the screen, from the
+ * browser's size up to 12.5% more (18px from about 1440px wide). Every size
+ * is in rem, so text, spacing and controls scale together; breakpoints stay
+ * put, since media queries measure rem from the browser's default.
  */
 @media (min-width: 60rem) {
   html {
-    font-size: 112.5%;
+    font-size: clamp(1rem, 0.5956rem + 0.588vw, 1.125rem);
   }
 }
 

@@ -1,3 +1,4 @@
+import { isEmptyRoundOver } from '@/domain/cycle';
 import { cycleIdFor } from '@/domain/flow';
 import type { Cycle, CycleId, CycleStatus } from '@/domain/types';
 
@@ -6,6 +7,7 @@ import type { AdminPort } from '../backend';
 import { deny, pause, requireAdmin, type DemoContext } from './context';
 import { newDemoCycle } from './cycles';
 import type { DemoState } from './state';
+import { reviewActions } from './review';
 
 type AsAdmin = (change: (state: DemoState) => void) => Promise<void>;
 
@@ -34,7 +36,10 @@ function cycleActions(asAdmin: AsAdmin) {
 
     deleteCycle: (cycleId) =>
       asAdmin((state) => {
-        cycleIn(state, cycleId, ['nominating']);
+        const cycle = cycleIn(state, cycleId, ['nominating']);
+        if (cycle.responses > 0 || cycle.nominationIds.length > 0 || cycle.letGo.length > 0) {
+          deny();
+        }
         // Removes a key from the demo store, not user-controlled input.
         // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
         delete state.cycles[cycleId];
@@ -50,6 +55,14 @@ function cycleActions(asAdmin: AsAdmin) {
     finishReading: (cycleId) =>
       asAdmin((state) => {
         const cycle = cycleIn(state, cycleId, ['reading']);
+        cycle.status = 'finished';
+        cycle.finishedAt = new Date();
+      }),
+
+    endEmptyRound: (cycleId) =>
+      asAdmin((state) => {
+        const cycle = cycleIn(state, cycleId, ['nominating']);
+        if (!isEmptyRoundOver(cycle, state.settings.members)) deny();
         cycle.status = 'finished';
         cycle.finishedAt = new Date();
       }),
@@ -100,5 +113,6 @@ export function createDemoAdmin(context: DemoContext): AdminPort {
   return {
     ...cycleActions(asAdmin),
     ...allowlistActions(context, asAdmin),
+    ...reviewActions(context),
   };
 }

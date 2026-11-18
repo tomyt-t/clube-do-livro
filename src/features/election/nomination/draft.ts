@@ -10,6 +10,10 @@ export interface Draft {
 
 export const EMPTY_DRAFT: Draft = { title: '', link: '' };
 
+/** Said when the same title (see `titleKey`) was already nominated in this round. */
+export const TITLE_TAKEN =
+  'Já indicaram uma leitura com esse título. Se for outra obra, acrescente o autor; se for a mesma, escolha outra.';
+
 export type CoverChoice =
   { kind: 'catalog'; option: CoverOption } | { kind: 'upload'; dataUrl: string } | { kind: 'none' };
 

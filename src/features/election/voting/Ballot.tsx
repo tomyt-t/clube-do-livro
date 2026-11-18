@@ -1,12 +1,10 @@
-import { useState, type ReactNode } from 'react';
-
-import tableScene from '@/assets/illustrations/boteco-mesa.svg';
+import { useState } from 'react';
 
 import type { Cycle, Nomination, NominationId } from '@/domain/types';
 import { requiredChoices } from '@/domain/voting';
 import { useMemberCount } from '@/features/club/use-club';
-import { cx } from '@/ui/cx';
 import { peopleOutOf, VOTED } from '@/ui/format';
+import { PageSide } from '@/ui/Page';
 import { useMediaQuery, WIDE } from '@/ui/use-media-query';
 
 import {
@@ -49,11 +47,13 @@ function useBallotView() {
 function BallotHeader({
   cycle,
   required,
+  merged,
   view,
   onView,
 }: {
   cycle: Cycle;
   required: number;
+  merged: boolean;
   view: BallotView;
   onView: (view: BallotView) => void;
 }) {
@@ -69,6 +69,11 @@ function BallotHeader({
       </div>
       {required === 2 && (
         <p className={styles.tip}>Cada escolha vale um voto; a 1ª só desempata.</p>
+      )}
+      {merged && (
+        <p className={styles.tip}>
+          Sua indicação foi juntada com uma igual e já conta como sua 1ª opção. Escolha mais uma.
+        </p>
       )}
     </header>
   );
@@ -96,13 +101,13 @@ interface BallotProps {
   /** In the order to show. */
   options: readonly Nomination[];
   own: NominationId | null;
+  /** The member's nomination was merged: it already counts as their first choice. */
+  merged: boolean;
   uid: string;
-  /** Title and steps, at the top of the sidebar on wide screens. */
-  intro?: ReactNode;
 }
 
-export function Ballot({ cycle, options, own, uid, intro }: BallotProps) {
-  const required = requiredChoices(cycle.options, own);
+export function Ballot({ cycle, options, own, merged, uid }: BallotProps) {
+  const required = requiredChoices(cycle.options, own, merged);
   const { ballot, pick, dislike, swap } = useBallotDraft(required);
   const [view, setView] = useBallotView();
   const [confirming, setConfirming] = useState(false);
@@ -126,7 +131,9 @@ export function Ballot({ cycle, options, own, uid, intro }: BallotProps) {
     own,
     onPick: pick,
   };
-  const header = <BallotHeader cycle={cycle} required={required} view={view} onView={setView} />;
+  const header = (
+    <BallotHeader cycle={cycle} required={required} merged={merged} view={view} onView={setView} />
+  );
   const choices =
     view === 'list' ? (
       <BallotList {...choose} />
@@ -134,32 +141,22 @@ export function Ballot({ cycle, options, own, uid, intro }: BallotProps) {
       <BallotDeck {...choose} wide={wide} keyboard={!confirming} onDislike={dislike} />
     );
 
+  // Desktop: the header and the choices so far go to the page's sidebar.
   return (
-    <div className={cx(styles.ballot, wide && styles.wide)}>
-      {wide ? (
-        <>
-          <aside className={styles.side}>
-            {intro}
-            {header}
-            <SideSummary {...summary} />
-            <img className={styles.sideArt} src={tableScene} alt="" aria-hidden="true" />
-          </aside>
-          <div className={styles.stage}>{choices}</div>
-        </>
-      ) : (
-        <>
-          {header}
-          {choices}
-          <BarSummary {...summary} />
-        </>
-      )}
+    <div className={styles.ballot}>
+      <PageSide>
+        {header}
+        {wide && <SideSummary {...summary} />}
+      </PageSide>
+      {choices}
+      {!wide && <BarSummary {...summary} />}
       <ConfirmBallot
         open={confirming}
         picks={picks}
         busy={casting.busy}
         error={casting.error}
         onConfirm={() => {
-          void casting.cast(ballot.picks);
+          void casting.cast(ballot.picks, !merged);
         }}
         onCancel={() => {
           setConfirming(false);

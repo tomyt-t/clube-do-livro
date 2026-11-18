@@ -4,7 +4,7 @@ import { BookCover } from '@/ui/BookCover';
 import { describeError } from '@/ui/describe-error';
 import { EmptyState } from '@/ui/EmptyState';
 import { Notice } from '@/ui/Notice';
-import { Page } from '@/ui/Page';
+import { Page, PageSide } from '@/ui/Page';
 import { Loading } from '@/ui/Spinner';
 
 import { CycleRecord } from './CycleRecord';
@@ -56,7 +56,9 @@ function HistoryOverview({ cycles }: { cycles: readonly DecidedCycle[] }) {
   }
   return (
     <>
-      <Shelf cycles={cycles} />
+      <PageSide>
+        <Shelf cycles={cycles} />
+      </PageSide>
       <div className={styles.records}>
         {cycles.map((cycle) => (
           <CycleRecord key={cycle.id} cycle={cycle} anchor={anchorOf(cycle)} />
@@ -69,7 +71,7 @@ function HistoryOverview({ cycles }: { cycles: readonly DecidedCycle[] }) {
 export function HistoryPage() {
   const cycles = useCycles();
   return (
-    <Page title="Histórico" width="roomy">
+    <Page title="Histórico">
       {cycles.status === 'loading' && <Loading />}
       {cycles.status === 'error' && (
         <Notice tone="error" title="Não foi possível abrir o histórico">

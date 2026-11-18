@@ -1,4 +1,6 @@
-import { orderBy, query } from 'firebase/firestore';
+import { getDoc, orderBy, query } from 'firebase/firestore';
+
+import { titleKey } from '@/domain/title-key';
 
 import type { ClubPort } from '../backend';
 
@@ -16,6 +18,19 @@ export function createFirebaseClub({ db }: FirebaseServices): ClubPort {
 
     watchNominations: (cycleId, subscriber) =>
       listenToQuery(refs.nominations(db, cycleId), toNomination, subscriber),
+
+    watchOwnNomination: (cycleId, nominationId, subscriber) =>
+      listenToDoc(
+        refs.nomination(db, cycleId, nominationId),
+        (snapshot) => {
+          const data = dataOf(snapshot);
+          return data ? toNomination(snapshot.id, data) : null;
+        },
+        subscriber,
+      ),
+
+    isTitleTaken: (cycleId, title) =>
+      guard(getDoc(refs.title(db, cycleId, titleKey(title))).then((found) => found.exists())),
 
     watchOwnAnswer: (cycleId, uid, subscriber) =>
       listenToDoc(

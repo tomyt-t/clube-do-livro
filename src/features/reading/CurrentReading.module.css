@@ -72,3 +72,34 @@
   gap: 0.625rem;
   margin-block-start: 1.625rem;
 }
+
+/*
+ * Desktop: the facts sit in the sidebar as ruled rows, like the ballot's
+ * choices: an ink rule above, a hairline under each, label and value apart.
+ */
+@media (min-width: 60rem) {
+  .facts {
+    grid-template-columns: minmax(0, 1fr);
+    margin-block-start: 0;
+  }
+
+  .facts > div,
+  .facts > div + div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: 0.625rem 0;
+    border-inline-start: 0;
+    border-block-end: 1px solid var(--line);
+  }
+
+  .facts dd {
+    margin: 0;
+    text-align: end;
+  }
+
+  .reading {
+    padding-block-start: 0;
+  }
+}

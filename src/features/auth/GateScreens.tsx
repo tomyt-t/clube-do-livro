@@ -8,21 +8,31 @@ import { TextField } from '@/ui/TextField';
 import { GateScreen } from './GateScreen';
 import { useSession } from './session';
 
-export function AccessDenied({ email }: { email: string }) {
+export function AccessDenied({ email, taken }: { email: string; taken: boolean }) {
   const { actions } = useSession();
+  const shown = <strong>{email || 'uma conta sem email'}</strong>;
   return (
     <GateScreen
-      title="Este email não está na lista do clube"
+      title={
+        taken ? 'Este email já entrou com outra conta' : 'Este email não está na lista do clube'
+      }
       actions={
         <Button variant="secondary" block onClick={() => void actions.signOut()}>
           Entrar com outra conta
         </Button>
       }
     >
-      <p>
-        Você entrou como <strong>{email || 'uma conta sem email'}</strong>. Peça para quem organiza
-        o clube incluir esse endereço, ou entre com outro.
-      </p>
+      {taken ? (
+        <p>
+          {shown} já entrou no clube com outra conta (talvez uma que foi apagada). Para usar esta,
+          peça para quem organiza tirar o email da lista e incluir de novo.
+        </p>
+      ) : (
+        <p>
+          Você entrou como {shown}. Peça para quem organiza o clube incluir esse endereço, ou entre
+          com outro.
+        </p>
+      )}
     </GateScreen>
   );
 }

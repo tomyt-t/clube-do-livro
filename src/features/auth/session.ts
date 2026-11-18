@@ -8,7 +8,7 @@ export type SessionState =
   /** The page was opened from a sign-in link on another device. */
   | { status: 'needs-email' }
   | { status: 'checking'; user: SessionUser }
-  | { status: 'denied'; user: SessionUser }
+  | { status: 'denied'; user: SessionUser; taken: boolean }
   | { status: 'member'; user: SessionUser; isAdmin: boolean }
   | { status: 'error'; user: SessionUser | null };
 

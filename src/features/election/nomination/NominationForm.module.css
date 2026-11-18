@@ -54,3 +54,27 @@
   color: var(--ink-2);
   font-size: var(--text-xs);
 }
+
+/*
+ * Desktop: the two answers side by side, the note under both. The review's
+ * rule spans the content column like every other; its fields keep a
+ * readable width.
+ */
+@media (min-width: 60rem) {
+  .choose {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-inline-size: 36rem;
+  }
+
+  .choose .note {
+    grid-column: 1 / -1;
+  }
+
+  .review {
+    max-inline-size: none;
+  }
+
+  .review > :not(.preview) {
+    max-inline-size: 36rem;
+  }
+}

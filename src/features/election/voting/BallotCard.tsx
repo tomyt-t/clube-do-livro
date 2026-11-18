@@ -8,6 +8,7 @@ import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CrossIcon } from '@/ui/ic
 import { synopsisCredit } from '@/ui/synopsis-credit';
 import { SynopsisText } from '@/ui/SynopsisText';
 import { useOverlayScrollbar } from '@/ui/use-overlay-scrollbar';
+import { withHost } from '@/ui/link-host';
 
 import { rankLabel } from './ballot-draft';
 import { swipeDirection } from './deck';
@@ -42,7 +43,7 @@ function Synopsis({ nomination }: { nomination: Nomination }) {
   const credit = synopsisCredit(synopsisSource);
   const link = synopsisUrl && (
     <a href={synopsisUrl} target="_blank" rel="noopener noreferrer">
-      {synopsis ? 'Abrir o link' : 'Ler a sinopse no link'}
+      {withHost(synopsis ? 'Abrir o link' : 'Ler a sinopse no link', synopsisUrl)}
       <span className="visually-hidden"> (abre em outra aba)</span>
     </a>
   );

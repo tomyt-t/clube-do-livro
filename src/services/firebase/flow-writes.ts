@@ -1,7 +1,14 @@
-import { getDoc, serverTimestamp, updateDoc, writeBatch, type Firestore } from 'firebase/firestore';
+import {
+  arrayUnion,
+  getDoc,
+  serverTimestamp,
+  updateDoc,
+  writeBatch,
+  type Firestore,
+} from 'firebase/firestore';
 
 import { cycleIdFor } from '@/domain/flow';
-import { emptyResults } from '@/domain/tally';
+import { conflictIds, type ConflictGroup } from '@/domain/review';
 import type { Book, CycleId, DecisionMethod, NominationId, VoteResults } from '@/domain/types';
 
 import { toResults } from './converters';
@@ -16,10 +23,38 @@ import { refs } from './refs';
 interface StartVotingInput {
   cycleId: CycleId;
   options: readonly NominationId[];
+  opening: VoteResults;
   votingDeadline: Date | null;
 }
 
-/** Fixes the ballot's options and opens an empty tally, in one batch. */
+/** How a review is stored: every flagged id (null while the check runs) and the groups. */
+export function reviewData(groups: readonly ConflictGroup[] | null) {
+  if (groups === null) return { ids: null, groups: [] };
+  return {
+    ids: conflictIds(groups),
+    groups: groups.map(({ ids, reason }) => ({ ids: [...ids], reason })),
+  };
+}
+
+/** Everyone answered: the list opens for the duplicate check, and no more nominations come in. */
+export async function startReview(db: Firestore, cycleId: CycleId) {
+  await updateDoc(refs.cycle(db, cycleId), { review: reviewData(null) });
+}
+
+/** What the check found, recorded once; flagged readings also join the round's tally of flags. */
+export async function recordReview(
+  db: Firestore,
+  cycleId: CycleId,
+  groups: readonly ConflictGroup[],
+) {
+  const ids = conflictIds(groups);
+  await updateDoc(refs.cycle(db, cycleId), {
+    review: reviewData(groups),
+    ...(ids.length > 0 ? { flagged: arrayUnion(...ids) } : {}),
+  });
+}
+
+/** Fixes the ballot's options and opens the tally (merged readings ahead), in one batch. */
 export async function startVoting(db: Firestore, input: StartVotingInput) {
   const { cycleId, options, votingDeadline } = input;
   const batch = writeBatch(db);
@@ -30,7 +65,7 @@ export async function startVoting(db: Firestore, input: StartVotingInput) {
     votingOpenedAt: serverTimestamp(),
     votingDeadline,
   });
-  batch.set(refs.tally(db, cycleId), emptyResults(options));
+  batch.set(refs.tally(db, cycleId), input.opening);
   await batch.commit();
 }
 

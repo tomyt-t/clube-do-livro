@@ -2,8 +2,16 @@ import { useCallback } from 'react';
 
 import { useBackend } from '@/app/services';
 import { useWatch, type Watched } from '@/app/use-watch';
-import type { ClubSettings, Cycle, CycleId, MemberId, Nomination, OwnAnswer } from '@/domain/types';
-import type { Subscriber } from '@/services/backend';
+import type {
+  ClubSettings,
+  Cycle,
+  CycleId,
+  MemberId,
+  Nomination,
+  NominationId,
+  OwnAnswer,
+} from '@/domain/types';
+import type { MemberProfile, Subscriber } from '@/services/backend';
 
 /** Live club data shared by the pages. */
 
@@ -22,6 +30,28 @@ export function useNominations(cycleId: CycleId): Watched<Nomination[]> {
   return useWatch(watch);
 }
 
+/**
+ * The member's own nomination: while nominations are open, the only one they
+ * can read. Null when they have none.
+ */
+export function useOwnNomination(
+  cycleId: CycleId,
+  nominationId: NominationId | null,
+): Watched<Nomination | null> {
+  const { club } = useBackend();
+  const watch = useCallback(
+    (s: Subscriber<Nomination | null>) => {
+      if (nominationId === null) {
+        s.next(null);
+        return () => undefined;
+      }
+      return club.watchOwnNomination(cycleId, nominationId, s);
+    },
+    [club, cycleId, nominationId],
+  );
+  return useWatch(watch);
+}
+
 /** The member's own nomination answer for a cycle; only they can read it. */
 export function useOwnAnswer(cycleId: CycleId, uid: MemberId): Watched<OwnAnswer | null> {
   const { club } = useBackend();
@@ -29,6 +59,13 @@ export function useOwnAnswer(cycleId: CycleId, uid: MemberId): Watched<OwnAnswer
     (s: Subscriber<OwnAnswer | null>) => club.watchOwnAnswer(cycleId, uid, s),
     [club, cycleId, uid],
   );
+  return useWatch(watch);
+}
+
+/** Members' public profiles: name and photo, never the email. */
+export function useMemberProfiles(): Watched<MemberProfile[]> {
+  const { club } = useBackend();
+  const watch = useCallback((s: Subscriber<MemberProfile[]>) => club.watchMembers(s), [club]);
   return useWatch(watch);
 }
 

@@ -16,12 +16,21 @@ describe('readConfig', () => {
       clubName: 'Leitores',
       googleBooksApiKey: null,
       appCheckSiteKey: null,
+      aiModel: null,
       firebase: {
         apiKey: 'key',
         authDomain: 'clube.firebaseapp.com',
         projectId: 'clube',
         appId: '1:2:web:3',
       },
+    });
+  });
+
+  it('turns the duplicate check on with a model name, only with App Check', () => {
+    const model = { ...firebaseEnv, VITE_AI_MODEL: ' gemini-3.5-flash-lite ' };
+    expect(readConfig(model)).toMatchObject({ aiModel: null });
+    expect(readConfig({ ...model, VITE_APPCHECK_SITE_KEY: 'site-key' })).toMatchObject({
+      aiModel: 'gemini-3.5-flash-lite',
     });
   });
 

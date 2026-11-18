@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { openingResults } from '@/domain/review';
 import type { Nomination } from '@/domain/types';
 import { answerAs, emptyClub, firstValue, voteAs } from '@/test/backend';
 import { makeBook } from '@/test/factories';
@@ -68,13 +69,57 @@ describe('demo nominations', () => {
   it('never records who nominated a book', async () => {
     const backend = emptyClub();
     const cycleId = await backend.admin.openCycle({ number: 1, nominationDeadline: null });
-    await answerAs(backend, cycleId, 'rafa', makeBook({ title: 'Torto Arado' }));
+    const id = `${await answerAs(backend, cycleId, 'rafa', makeBook({ title: 'Torto Arado' }))}`;
+    await backend.flow.startVoting({
+      cycleId,
+      options: [id],
+      opening: openingResults([id], {}),
+      votingDeadline: null,
+    });
 
     const [nomination] = await firstValue<Nomination[]>((s) =>
       backend.club.watchNominations(cycleId, s),
     );
     expect(Object.keys(nomination ?? {}).sort()).toEqual(['book', 'id']);
     expect(nomination?.id).not.toContain('rafa');
+  });
+
+  it('hides the nominations from everyone else until the vote opens', async () => {
+    const backend = emptyClub();
+    const cycleId = await backend.admin.openCycle({ number: 1, nominationDeadline: null });
+    const id = `${await answerAs(backend, cycleId, 'rafa')}`;
+    const ownAs = (uid: string) => {
+      backend.auth.signInAs(uid);
+      return firstValue<Nomination | null>((s) => backend.club.watchOwnNomination(cycleId, id, s));
+    };
+
+    await expect(
+      firstValue<Nomination[]>((s) => backend.club.watchNominations(cycleId, s)),
+    ).rejects.toMatchObject(denied);
+    await expect(ownAs('julia')).rejects.toMatchObject(denied);
+    expect((await ownAs('rafa'))?.id).toBe(id);
+
+    backend.auth.signInAs('marina');
+    await backend.flow.startVoting({
+      cycleId,
+      options: [id],
+      opening: openingResults([id], {}),
+      votingDeadline: null,
+    });
+    expect((await ownAs('julia'))?.id).toBe(id);
+  });
+
+  it('takes each title once, however it is written', async () => {
+    const backend = emptyClub();
+    const cycleId = await backend.admin.openCycle({ number: 1, nominationDeadline: null });
+    await answerAs(backend, cycleId, 'rafa', makeBook({ title: 'Dom Casmurro, Machado de Assis' }));
+
+    expect(await backend.club.isTitleTaken(cycleId, 'dom casmurro / machado de assis')).toBe(true);
+    expect(await backend.club.isTitleTaken(cycleId, 'Dom Casmurro')).toBe(false);
+    await expect(
+      answerAs(backend, cycleId, 'julia', makeBook({ title: 'DOM CASMURRO — Machado de Assis' })),
+    ).rejects.toMatchObject(denied);
+    await answerAs(backend, cycleId, 'julia', makeBook({ title: 'Dom Casmurro' }));
   });
 
   it('rejects invalid books', async () => {
@@ -93,7 +138,12 @@ describe('demo ballots', () => {
     const rafa = `${await answerAs(backend, cycleId, 'rafa')}`;
     const julia = `${await answerAs(backend, cycleId, 'julia')}`;
     const teo = `${await answerAs(backend, cycleId, 'teo')}`;
-    await backend.flow.startVoting({ cycleId, options: [rafa, julia, teo], votingDeadline: null });
+    await backend.flow.startVoting({
+      cycleId,
+      options: [rafa, julia, teo],
+      opening: openingResults([rafa, julia, teo], {}),
+      votingDeadline: null,
+    });
     return { backend, cycleId, rafa, julia, teo };
   }
 

@@ -1,11 +1,11 @@
 import { screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Nomination } from '@/domain/types';
+import type { Nomination, OwnAnswer } from '@/domain/types';
 import { searchCovers, type CoverOption } from '@/services/covers';
-import { createDemoBackend } from '@/services/demo';
+import { createDemoBackend, createDemoState, type DemoScenario } from '@/services/demo';
 import { findSynopsis } from '@/services/synopsis';
-import { firstValue } from '@/test/backend';
+import { firstValue, settle } from '@/test/backend';
 import { renderAsMember } from '@/test/render';
 
 import { ElectionPage } from './ElectionPage';
@@ -51,13 +51,21 @@ beforeEach(() => {
   );
 });
 
-function renderElection(uid = 'marina') {
-  const backend = createDemoBackend();
+function renderElection(uid = 'marina', scenario: DemoScenario = 'nominating') {
+  const backend = createDemoBackend({ state: createDemoState(new Date(), scenario) });
   return { ...renderAsMember(<ElectionPage />, uid, { backend }), backend };
 }
 
-async function storedNominations(backend: ReturnType<typeof createDemoBackend>) {
-  return firstValue<Nomination[]>((s) => backend.club.watchNominations('ciclo-4', s));
+/** The book the member sent, read back the way the app may: their own nomination only. */
+async function sentBook(backend: ReturnType<typeof createDemoBackend>, uid = 'marina') {
+  const answer = await firstValue<OwnAnswer | null>((s) =>
+    backend.club.watchOwnAnswer('ciclo-4', uid, s),
+  );
+  const id = answer?.kind === 'nominated' ? answer.nominationId : 'nenhuma';
+  const nomination = await firstValue<Nomination | null>((s) =>
+    backend.club.watchOwnNomination('ciclo-4', id, s),
+  );
+  return nomination?.book;
 }
 
 /** The rows of the nominations list, in the order shown, once they arrive. */
@@ -83,19 +91,31 @@ async function confirmSending(user: ReturnType<typeof renderElection>['user']) {
   await user.click(screen.getByRole('button', { name: 'Enviar indicação' }));
   const dialog = screen.getByRole('dialog', { name: 'Enviar esta indicação?' });
   await user.click(within(dialog).getByRole('button', { name: 'Enviar indicação' }));
-  expect(await screen.findByText('Sua indicação está na lista.')).toBeInTheDocument();
+  expect(await screen.findByText('Sua indicação foi registrada.')).toBeInTheDocument();
 }
 
 describe('ElectionPage, nominations', () => {
-  it('shows where the cycle is and the nominations so far, alphabetically', async () => {
+  it('shows where the cycle is and how many nominated, keeping the books hidden', async () => {
     renderElection();
 
     const steps = await screen.findByRole('list', { name: 'Etapas da votação' });
     expect(within(steps).getByText('Indicações')).toHaveAttribute('aria-current', 'step');
-    const [first, second, ...rest] = await nominationRows();
-    expect(first).toHaveTextContent(/Ensaio sobre a Cegueira\s*José Saramago$/);
-    expect(second).toHaveTextContent(/Memórias Póstumas de Brás Cubas\s*Machado de Assis$/);
-    expect(rest).toEqual([]);
+    const list = await screen.findByRole('region', { name: 'Indicações até agora' });
+    expect(list).toHaveTextContent('2 leituras');
+    expect(list).toHaveTextContent(
+      'Elas ficam escondidas. A lista completa aparece quando todos responderem.',
+    );
+    expect(within(list).queryByRole('listitem')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ensaio sobre a Cegueira/)).not.toBeInTheDocument();
+  });
+
+  it('stops a title someone already nominated before searching covers', async () => {
+    const { user } = renderElection();
+    await fillDetails(user, 'ensaio sobre a cegueira — JOSÉ SARAMAGO');
+
+    expect(await screen.findByText(/Já indicaram uma leitura com esse título/)).toBeInTheDocument();
+    expect(searchCovers).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Título / autor')).toBeInTheDocument();
   });
 
   it('asks before passing, and passing is final', async () => {
@@ -125,8 +145,9 @@ describe('ElectionPage, nominations', () => {
     await fillDetails(user, 'Berserk, Kentaro Miura');
 
     expect(await screen.findByRole('radio', { name: /Kentarou Miura/ })).toBeChecked();
-    const synopsis = screen.getByLabelText('Sinopse (opcional)');
-    expect(synopsis).toHaveValue('Sinopse do anilist');
+    // The synopsis arrives after the cover is chosen.
+    const synopsis = await screen.findByDisplayValue('Sinopse do anilist');
+    expect(synopsis).toBe(screen.getByLabelText('Sinopse (opcional)'));
 
     await user.click(screen.getByRole('radio', { name: /Kentaro Miura · 1990/ }));
     expect(await screen.findByDisplayValue('Sinopse do open-library')).toBeInTheDocument();
@@ -136,8 +157,7 @@ describe('ElectionPage, nominations', () => {
     await confirmSending(user);
 
     expect(await rowOf('Berserk')).toHaveTextContent('Sua indicação');
-    const sent = (await storedNominations(backend)).find((n) => n.book.title.startsWith('Berserk'));
-    expect(sent?.book).toEqual({
+    expect(await sentBook(backend)).toEqual({
       title: 'Berserk, Kentaro Miura',
       synopsis: 'Um espadachim contra o destino.',
       synopsisSource: 'open-library',
@@ -157,8 +177,12 @@ describe('ElectionPage, nominations', () => {
     expect(screen.getByRole('radio', { name: 'Sem capa' })).toBeChecked();
     await confirmSending(user);
 
-    const sent = (await storedNominations(backend)).find((n) => n.book.title === 'Zine do bairro');
-    expect(sent?.book).toMatchObject({ coverUrl: null, synopsis: null, synopsisSource: null });
+    expect(await sentBook(backend)).toMatchObject({
+      title: 'Zine do bairro',
+      coverUrl: null,
+      synopsis: null,
+      synopsisSource: null,
+    });
   });
 
   it('uses an image the member uploads', async () => {
@@ -171,8 +195,7 @@ describe('ElectionPage, nominations', () => {
     expect(await screen.findByRole('radio', { name: 'Sua imagem' })).toBeChecked();
     await confirmSending(user);
 
-    const sent = (await storedNominations(backend)).find((n) => n.book.title === 'Berserk');
-    expect(sent?.book.coverUrl).toBe('data:image/jpeg;base64,AAAA');
+    expect((await sentBook(backend))?.coverUrl).toBe('data:image/jpeg;base64,AAAA');
   });
 
   it('says when the cover search fails, and still lets the member go on', async () => {
@@ -188,12 +211,56 @@ describe('ElectionPage, nominations', () => {
     expect(screen.getByRole('button', { name: 'Enviar indicação' })).toBeEnabled();
   });
 
-  it('shows members what they already answered, and marks only their own book', async () => {
+  it('shows members what they already answered, and only their own book', async () => {
     renderElection('rafa');
 
-    expect(await screen.findByText('Sua indicação está na lista.')).toBeInTheDocument();
+    expect(await screen.findByText('Sua indicação foi registrada.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Indicações abertas' })).toBeInTheDocument();
-    expect(await rowOf('Ensaio sobre a Cegueira')).toHaveTextContent('Sua indicação');
-    expect(await rowOf('Memórias Póstumas')).not.toHaveTextContent('Sua indicação');
+    const [own, ...others] = await nominationRows();
+    expect(own).toHaveTextContent('Ensaio sobre a Cegueira');
+    expect(own).toHaveTextContent('Sua indicação');
+    expect(others).toEqual([]);
+    expect(screen.getByText(/Você vê só a sua\./)).toBeInTheDocument();
+  });
+});
+
+describe('ElectionPage, the review before the vote', () => {
+  it('shows everyone the whole list, and only that there was a conflict', async () => {
+    renderElection('rafa', 'reviewing');
+    expect(await screen.findByText('Houve um conflito')).toBeInTheDocument();
+    const list = await screen.findByRole('region', { name: 'Indicações' });
+    expect(await within(list).findAllByRole('listitem')).toHaveLength(5);
+    expect(screen.queryByText(/Téo|Lia/)).not.toBeInTheDocument();
+  });
+
+  it('gives a merged nominator one choice, never their own reading', async () => {
+    const backend = createDemoBackend({ state: createDemoState(new Date(), 'reviewing') });
+    backend.auth.signInAs('marina');
+    await backend.admin.updateReview({
+      cycleId: 'ciclo-4',
+      groups: [],
+      merged: { casmurro: 'dom' },
+    });
+    await settle(backend);
+    renderAsMember(<ElectionPage />, 'lia', { backend });
+
+    expect(await screen.findByRole('heading', { name: 'Escolha uma leitura' })).toBeInTheDocument();
+    expect(screen.getByText(/já conta como sua 1ª opção/)).toBeInTheDocument();
+    const own = screen.getByRole('checkbox', { name: /Dom Casmurro/ });
+    expect(own).toBeDisabled();
+  });
+
+  it('asks a nominator whose reading was let go for a new one', async () => {
+    const backend = createDemoBackend({ state: createDemoState(new Date(), 'reviewing') });
+    backend.auth.signInAs('marina');
+    await backend.admin.reopenNominations({ cycleId: 'ciclo-4', nominationIds: ['casmurro'] });
+    renderAsMember(<ElectionPage />, 'lia', { backend });
+
+    expect(await screen.findByText('Sua indicação foi liberada para trocar')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Indique uma leitura' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Indicar uma leitura' })).toBeInTheDocument();
+    // They choose again knowing the list (everyone saw it during the review); theirs left it.
+    const list = await screen.findByRole('region', { name: 'Indicações até agora' });
+    expect(await within(list).findAllByRole('listitem')).toHaveLength(4);
   });
 });

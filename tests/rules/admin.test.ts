@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { openingResults } from '@/domain/review';
 import { drawWinner } from '@/domain/draw';
 import type { DecisionMethod, NominationId, VoteResults } from '@/domain/types';
 import {
@@ -50,6 +51,7 @@ import {
   seedNominating,
   seedTallying,
   seedVoting,
+  withoutRules,
   type Persona,
 } from './helpers';
 
@@ -68,7 +70,12 @@ beforeEach(async () => {
 });
 
 function openVoting(options: NominationId[] = ALL_NOMINATIONS, persona = admin) {
-  return startVoting(dbAs(env, persona), { cycleId: CYCLE, options, votingDeadline: null });
+  return startVoting(dbAs(env, persona), {
+    cycleId: CYCLE,
+    options,
+    opening: openingResults(options, {}),
+    votingDeadline: null,
+  });
 }
 
 /** Voting closed with these counts per book: [votes, first choices]. */
@@ -278,7 +285,16 @@ describe('declaring a clear winner', () => {
     await assertFails(declare({ nominationId: N_BIA, method: 'votes', results }));
   });
 
-  it('queues the book, then moves it through reading', async () => {
+  it('queues the book while the round before is read, then moves it through reading', async () => {
+    // Nothing is being read: the winner cannot wait.
+    await assertFails(
+      declare({ nominationId: N_ANA, method: 'votes', results, startReading: false }),
+    );
+    await withoutRules(env, (db) =>
+      setDoc(doc(db, 'cycles', 'ciclo-0'), { number: 0, status: 'reading' }),
+    );
+    // The round before is being read: the winner cannot start too.
+    await assertFails(declare({ nominationId: N_ANA, method: 'votes', results }));
     await assertSucceeds(
       declare({ nominationId: N_ANA, method: 'votes', results, startReading: false }),
     );

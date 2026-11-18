@@ -9,10 +9,11 @@ import type { DemoState } from './state';
  * Where the demo's current cycle (number 4) stands, so each screen of the
  * election can be tried without the organizer's controls.
  */
-export type DemoScenario = 'nominating' | 'voting' | 'reading';
+export type DemoScenario = 'nominating' | 'reviewing' | 'voting' | 'reading';
 
 export const DEMO_SCENARIOS: readonly { id: DemoScenario; label: string }[] = [
   { id: 'nominating', label: 'Indicações' },
+  { id: 'reviewing', label: 'Conferência' },
   { id: 'voting', label: 'Votação' },
   { id: 'reading', label: 'Lendo' },
 ];
@@ -51,6 +52,11 @@ function currentCycle(now: Date, changes: Partial<Cycle>): Cycle {
     readingStartedAt: null,
     finishedReaders: 0,
     finishedAt: null,
+    review: null,
+    merged: {},
+    letGo: [],
+    letGoAt: null,
+    flagged: [],
     ...changes,
   };
 }
@@ -63,6 +69,26 @@ function seedNominating(state: DemoState, now: Date) {
     rafa: { kind: 'nominated', nominationId: 'ensaio' },
     julia: { kind: 'nominated', nominationId: 'bras' },
     teo: { kind: 'passed' },
+  };
+}
+
+const REVIEWED: BookKey[] = ['ensaio', 'bras', 'dom', 'vidas', 'casmurro'];
+
+/** Everyone answered; the check flagged two "Dom Casmurro" for the organizer. */
+function seedReviewing(state: DemoState, now: Date) {
+  state.cycles[CURRENT] = currentCycle(now, {
+    responses: 6,
+    nominationIds: REVIEWED,
+    review: { conflicts: [{ ids: ['dom', 'casmurro'], reason: 'Mesmo título: Dom Casmurro.' }] },
+  });
+  state.nominations[CURRENT] = nominations(REVIEWED);
+  state.answers[CURRENT] = {
+    rafa: { kind: 'nominated', nominationId: 'ensaio' },
+    julia: { kind: 'nominated', nominationId: 'bras' },
+    teo: { kind: 'nominated', nominationId: 'dom' },
+    bruno: { kind: 'nominated', nominationId: 'vidas' },
+    lia: { kind: 'nominated', nominationId: 'casmurro' },
+    marina: { kind: 'passed' },
   };
 }
 
@@ -102,6 +128,7 @@ function seedReading(state: DemoState) {
 
 export function seedCurrentCycle(state: DemoState, now: Date, scenario: DemoScenario) {
   if (scenario === 'voting') seedVoting(state, now);
+  else if (scenario === 'reviewing') seedReviewing(state, now);
   else if (scenario === 'reading') seedReading(state);
   else seedNominating(state, now);
   if (scenario !== 'reading') state.readers[READING] = ['teo', 'lia'];

@@ -2,30 +2,8 @@
   --ballotbar-height: 4.75rem;
 }
 
-/* Desktop: the choices and the button in a sidebar, the ballot beside it. */
-.wide {
-  display: grid;
-  grid-template-columns: 19rem minmax(0, 1fr);
-  gap: 4rem;
-  align-items: start;
-}
-
-.side {
-  display: block;
-}
-
 .header {
   margin-block-end: 0.75rem;
-}
-
-/* The boteco scene in the sidebar's free space, fading in from above. */
-.sideArt {
-  inline-size: 14.75rem;
-  margin-block-start: var(--space-4);
-  opacity: 0.34;
-  pointer-events: none;
-  user-select: none;
-  mask-image: linear-gradient(transparent, #000 30%);
 }
 
 /* "Escolha duas leituras", who voted, and the Lista | Cartas toggle. */
@@ -45,12 +23,6 @@
   color: var(--ink-2);
   font-size: var(--text-sm);
   font-weight: 500;
-}
-
-.wide .viewbar {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.875rem;
 }
 
 .tip {
@@ -238,12 +210,26 @@
   font-weight: 650;
 }
 
+/* Desktop: the header sits in the page's sidebar, one thing under another. */
 @media (min-width: 60rem) {
   .bar {
     display: none;
   }
 
-  .stage {
-    padding-block-start: 0.5rem;
+  .header {
+    margin-block-end: 0;
+  }
+
+  .viewbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.875rem;
+  }
+}
+
+/* Desktop: the readings on the ballot span the content column. */
+@media (min-width: 60rem) {
+  .done {
+    max-inline-size: none;
   }
 }

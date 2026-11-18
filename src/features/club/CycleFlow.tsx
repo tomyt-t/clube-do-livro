@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import { useBackend } from '@/app/services';
 import { nextFlowStep } from '@/domain/flow';
+import { useMember } from '@/features/auth/session';
 import { advance } from '@/services/election';
 
 import { useCycles, useMemberCount } from './use-club';
@@ -14,6 +15,7 @@ import { useCycles, useMemberCount } from './use-club';
  */
 export function CycleFlow() {
   const backend = useBackend();
+  const { isAdmin } = useMember();
   const cycles = useCycles();
   const members = useMemberCount();
   const attempted = useRef<string | null>(null);
@@ -24,12 +26,12 @@ export function CycleFlow() {
   useEffect(() => {
     if (!step || cycles.status !== 'ready' || attempted.current === key) return;
     attempted.current = key;
-    advance(backend, step, cycles.value).catch(() => {
+    advance(backend, step, cycles.value, { canFlag: isAdmin }).catch(() => {
       // Someone else took the step first, or it is no longer ready: let the
       // next change try again.
       attempted.current = null;
     });
-  }, [backend, cycles, key, step]);
+  }, [backend, cycles, isAdmin, key, step]);
 
   return null;
 }

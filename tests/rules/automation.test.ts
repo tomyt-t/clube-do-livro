@@ -6,12 +6,15 @@ import {
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { openingResults } from '@/domain/review';
 import type { NominationId } from '@/domain/types';
 import {
   closeVoting,
   declareWinner,
   finishAndOpenNext,
   startVoting,
+  recordReview,
+  startReview,
 } from '@/services/firebase/flow-writes';
 import { markFinished } from '@/services/firebase/member-writes';
 
@@ -56,21 +59,42 @@ beforeEach(async () => {
 const asCaio = () => dbAs(env, caio);
 
 const openVote = (options: NominationId[]) =>
-  startVoting(asCaio(), { cycleId: CYCLE, options, votingDeadline: null });
+  startVoting(asCaio(), {
+    cycleId: CYCLE,
+    options,
+    opening: openingResults(options, {}),
+    votingDeadline: null,
+  });
 
-describe('opening the vote', () => {
-  it('is up to any member once everyone answered, with exactly the nominations', async () => {
+const CLEAR = { review: { ids: [], groups: [] } };
+
+describe('the review, then the vote', () => {
+  it('opens the list for the check once everyone answered', async () => {
+    await seedAnswered(env, { responses: 3 });
+    await assertFails(startReview(asCaio(), CYCLE));
     await seedAnswered(env);
+    await assertSucceeds(startReview(asCaio(), CYCLE));
+  });
+
+  it('records the check once, then opens the vote if nothing was flagged', async () => {
+    await seedAnswered(env);
+    await assertFails(recordReview(asCaio(), CYCLE, []));
+    await startReview(asCaio(), CYCLE);
+    await assertFails(openVote(ALL_NOMINATIONS));
+    await assertSucceeds(recordReview(asCaio(), CYCLE, []));
+    await assertFails(recordReview(asCaio(), CYCLE, []));
     await assertSucceeds(openVote(ALL_NOMINATIONS));
   });
 
-  it('waits for everyone', async () => {
-    await seedAnswered(env, { responses: 3 });
+  it('waits for the organizer when the check flagged something', async () => {
+    await seedAnswered(env, {
+      review: { ids: [N_ANA, N_BIA], groups: [{ ids: [N_ANA, N_BIA], reason: 'Igual.' }] },
+    });
     await assertFails(openVote(ALL_NOMINATIONS));
   });
 
   it('refuses a ballot that drops, adds or reorders nominations', async () => {
-    await seedAnswered(env);
+    await seedAnswered(env, CLEAR);
     await assertFails(openVote([N_ANA, N_BIA]));
     await assertFails(openVote([...ALL_NOMINATIONS, 'made-up']));
     await assertFails(openVote([N_BIA, N_ANA, N_ADMIN]));
@@ -79,7 +103,7 @@ describe('opening the vote', () => {
   it('stops while the club has no member count', async () => {
     await seedAnswered(env);
     await withoutRules(env, (db) => deleteDoc(doc(db, 'settings', 'club')));
-    await assertFails(openVote(ALL_NOMINATIONS));
+    await assertFails(startReview(asCaio(), CYCLE));
   });
 });
 

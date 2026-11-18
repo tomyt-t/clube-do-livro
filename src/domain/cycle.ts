@@ -1,3 +1,4 @@
+import { isLetGoSettled } from './review';
 import type { Cycle, CycleStatus } from './types';
 
 const ELECTION_STATUSES: readonly CycleStatus[] = ['nominating', 'voting', 'tallying'];
@@ -33,9 +34,17 @@ export function nextCycleNumber(cycles: readonly Cycle[]): number {
   return cycles.reduce((max, cycle) => Math.max(max, cycle.number), 0) + 1;
 }
 
-/** A decided book starts right away unless another one is still being read. */
-export function statusAfterDecision(cycles: readonly Cycle[]): 'reading' | 'upcoming' {
-  return findCurrentReading(cycles) ? 'upcoming' : 'reading';
+/**
+ * A decided book starts right away, unless the round before is still being
+ * read (or waiting to be): then it waits its turn. The rules check the same.
+ */
+export function statusAfterDecision(
+  cycles: readonly Cycle[],
+  decided: Pick<Cycle, 'number'>,
+): 'reading' | 'upcoming' {
+  const previous = cycles.find((cycle) => cycle.number === decided.number - 1);
+  const busy = previous?.status === 'reading' || previous?.status === 'upcoming';
+  return busy ? 'upcoming' : 'reading';
 }
 
 export type ElectionStep = 'nominations' | 'voting' | 'result';
@@ -48,4 +57,19 @@ export function electionStep(status: CycleStatus): ElectionStep {
 
 export function isPastDeadline(deadline: Date | null, now: Date = new Date()): boolean {
   return deadline !== null && now.getTime() >= deadline.getTime();
+}
+
+/**
+ * A round nobody nominated in, once it can get no more nominations (everyone
+ * answered, or the deadline is over): there is nothing to vote on, so it can
+ * only end. The rules check the same.
+ */
+export function isEmptyRoundOver(cycle: Cycle, members: number, now = new Date()): boolean {
+  return (
+    cycle.status === 'nominating' &&
+    cycle.nominationIds.length === 0 &&
+    isLetGoSettled(cycle, now) &&
+    (cycle.responses >= members ||
+      (cycle.nominationDeadline !== null && now > cycle.nominationDeadline))
+  );
 }

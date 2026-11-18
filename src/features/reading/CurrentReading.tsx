@@ -8,6 +8,8 @@ import { buttonClass } from '@/ui/button-class';
 import { cx } from '@/ui/cx';
 import { countOf, formatDay } from '@/ui/format';
 import { ExternalIcon } from '@/ui/icons';
+import { withHost } from '@/ui/link-host';
+import { PageSide } from '@/ui/Page';
 
 import styles from './CurrentReading.module.css';
 import { FinishedReading } from './FinishedReading';
@@ -42,20 +44,22 @@ export function CurrentReading({ cycle, winner }: CurrentReadingProps) {
         </div>
       </div>
 
-      <dl className={styles.facts}>
-        <div>
-          <dt>Lendo desde</dt>
-          <dd>{formatDay(cycle.readingStartedAt ?? winner.decidedAt)}</dd>
-        </div>
-        <div>
-          <dt>Escolhida</dt>
-          <dd>{CHOSEN[winner.method]}</dd>
-        </div>
-        <div>
-          <dt>Indicações</dt>
-          <dd>{countOf(Math.max(cycle.options.length, 1), 'leitura', 'leituras')}</dd>
-        </div>
-      </dl>
+      <PageSide>
+        <dl className={styles.facts}>
+          <div>
+            <dt>Lendo desde</dt>
+            <dd>{formatDay(cycle.readingStartedAt ?? winner.decidedAt)}</dd>
+          </div>
+          <div>
+            <dt>Escolhida</dt>
+            <dd>{CHOSEN[winner.method]}</dd>
+          </div>
+          <div>
+            <dt>Indicações</dt>
+            <dd>{countOf(Math.max(cycle.options.length, 1), 'leitura', 'leituras')}</dd>
+          </div>
+        </dl>
+      </PageSide>
 
       {synopsis !== null && <ReadingSynopsis book={winner.book} text={synopsis} />}
 
@@ -68,12 +72,16 @@ export function CurrentReading({ cycle, winner }: CurrentReadingProps) {
             rel="noopener noreferrer"
           >
             <ExternalIcon width={18} height={18} />
-            Ler sinopse
+            {withHost('Ler sinopse', synopsisUrl)}
             <span className="visually-hidden"> (abre em outra aba)</span>
           </a>
         </div>
       )}
-      {cycle.status === 'reading' && <FinishedReading cycle={cycle} />}
+      {cycle.status === 'reading' && (
+        <PageSide>
+          <FinishedReading cycle={cycle} />
+        </PageSide>
+      )}
     </article>
   );
 }

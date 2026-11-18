@@ -3,6 +3,11 @@
   gap: var(--space-6);
 }
 
+/* The member's answer: no box of its own on phones, a readable width on desktop. */
+.answer {
+  display: contents;
+}
+
 .heading {
   font-size: var(--title-sm);
 }
@@ -104,5 +109,26 @@
 
   .row {
     padding-inline: 0;
+  }
+}
+
+@media (min-width: 60rem) {
+  .answer {
+    display: grid;
+    gap: var(--space-6);
+    align-content: start;
+  }
+}
+
+/* Desktop: in the sidebar, the same heading the ballot uses there. */
+@media (min-width: 60rem) {
+  .heading {
+    font: 650 1.0625rem var(--sans);
+    letter-spacing: -0.015em;
+  }
+
+  .meta {
+    margin-block-start: 0;
+    font-weight: 500;
   }
 }

@@ -62,8 +62,20 @@
   --topbar-height: 3.375rem;
   --tabbar-height: 3.9rem;
   --content-width: 42rem;
-  --roomy-width: 42rem;
   --wide-width: 68rem;
+
+  /*
+   * Desktop frame, from the prototype's desktop screen (px / 16): a 300px
+   * sidebar, 64px to the content, 40px above both, 48px margins. Every tab
+   * uses it, so titles, columns and rules never move between tabs.
+   */
+  --side-width: 18.75rem;
+  --side-gap: 4rem;
+  --side-block-gap: 1.75rem;
+  --page-top: 2.5rem;
+  /* Ruled sections: 34px apart, 14px from their rule to their label. */
+  --section-gap: 2.125rem;
+  --section-pad: 0.875rem;
 }
 
 @media (min-width: 48rem) {
@@ -75,10 +87,12 @@
 @media (min-width: 60rem) {
   :root {
     --title: 3.25rem;
-    /* A little more room across on desktop; the tabs past "Lendo" get more. */
-    --content-width: 48rem;
-    --roomy-width: 54rem;
+    --gutter: 3rem;
+    /* The frame every tab and the header share. */
     --wide-width: 76rem;
+    /* The prototype's 300px and 64px, giving way a little on smaller desktops. */
+    --side-width: clamp(15rem, 25vw, 18.75rem);
+    --side-gap: clamp(2.5rem, 5vw, 4rem);
   }
 }
 

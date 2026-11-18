@@ -4,6 +4,7 @@ import type { Book } from '@/domain/types';
 import { cx } from '@/ui/cx';
 import { SynopsisText } from '@/ui/SynopsisText';
 import { synopsisCredit } from '@/ui/synopsis-credit';
+import { withHost } from '@/ui/link-host';
 
 import styles from './ReadingSynopsis.module.css';
 
@@ -46,7 +47,11 @@ export function ReadingSynopsis({ book, text }: { book: Book; text: string }) {
         <p className={styles.credit}>
           {credit}
           {credit && book.synopsisUrl && ' '}
-          {book.synopsisUrl && <ExternalLink href={book.synopsisUrl}>Abrir o link</ExternalLink>}
+          {book.synopsisUrl && (
+            <ExternalLink href={book.synopsisUrl}>
+              {withHost('Abrir o link', book.synopsisUrl)}
+            </ExternalLink>
+          )}
         </p>
       )}
     </section>

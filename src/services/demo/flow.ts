@@ -1,11 +1,13 @@
 import { everyone, cycleIdFor } from '@/domain/flow';
-import { decide, emptyResults } from '@/domain/tally';
+import { isLetGoSettled, isReviewClear, openingResults } from '@/domain/review';
+import { decide } from '@/domain/tally';
 import type { Cycle, CycleId, CycleStatus, VoteResults } from '@/domain/types';
 
 import type { DeclareWinnerInput, FlowPort } from '../backend';
 
 import { deny, isAdmin, pause, requireMember, type DemoContext } from './context';
 import { newDemoCycle } from './cycles';
+import { isFullBallot, reviewSteps } from './review';
 import type { DemoState } from './state';
 
 /** Mirrors `firestore.rules`: a member may take a step once it is ready; the organizer always. */
@@ -18,11 +20,6 @@ function cycleIn(state: DemoState, cycleId: CycleId, status: CycleStatus): Cycle
 function allowWhen(context: DemoContext, ready: boolean) {
   requireMember(context);
   if (!ready && !isAdmin(context)) deny();
-}
-
-/** The options must be exactly the cycle's nominations, in arrival order. */
-function isFullBallot(cycle: Cycle, options: readonly string[]): boolean {
-  return options.join() === cycle.nominationIds.join();
 }
 
 /** The declared winner and method must be what the club's rule gives. */
@@ -41,12 +38,16 @@ export function createDemoFlow(context: DemoContext): FlowPort {
   const members = () => store.current.settings.members;
 
   return {
-    startVoting: async ({ cycleId, options, votingDeadline }) => {
+    ...reviewSteps(context, members),
+
+    startVoting: async ({ cycleId, options, opening, votingDeadline }) => {
       await pause(context);
       const cycle = cycleIn(store.current, cycleId, 'nominating');
-      const ready = everyone(cycle.responses, members()) && isFullBallot(cycle, options);
-      allowWhen(context, ready);
-      if (options.length === 0) deny();
+      allowWhen(context, isReviewClear(cycle.review));
+      if (!isLetGoSettled(cycle)) deny();
+      const exact =
+        JSON.stringify(opening) === JSON.stringify(openingResults(options, cycle.merged));
+      if (options.length === 0 || !isFullBallot(cycle, options) || !exact) deny();
       store.update((state) => {
         Object.assign(cycleIn(state, cycleId, 'nominating'), {
           status: 'voting',
@@ -55,7 +56,7 @@ export function createDemoFlow(context: DemoContext): FlowPort {
           votingOpenedAt: new Date(),
           votingDeadline,
         });
-        state.tallies[cycleId] = emptyResults(options);
+        state.tallies[cycleId] = structuredClone(opening);
       });
     },
 
