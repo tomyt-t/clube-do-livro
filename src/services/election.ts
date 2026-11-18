@@ -48,12 +48,6 @@ export interface FlowContext {
   /** The nominations of the cycle the step is about (read only for the steps that need them). */
   nominations: readonly Nomination[];
   checker: DuplicateChecker;
-  /**
-   * Whether this device may flag readings: only the organizer's. Flags let
-   * the organizer see who nominated those readings, so a member's device
-   * may only record that nothing was found and leaves flags to the organizer.
-   */
-  canFlag: boolean;
 }
 
 /** Opens the vote with every nomination left after merges, merged ones ahead by their nominators. */
@@ -135,7 +129,7 @@ export async function takeFlowStep(
       return;
     case 'check': {
       const groups = await checkNominations(context.checker, cycle, context.nominations);
-      if (groups.length === 0 || context.canFlag) await flow.recordReview(cycle.id, groups);
+      await flow.recordReview(cycle.id, groups);
       return;
     }
     case 'open-voting':
@@ -173,12 +167,7 @@ export function readOnce<T>(watch: (subscriber: Subscriber<T>) => Unsubscribe): 
  * Only declaring the winner needs them, and only then may they be read:
  * they stay hidden until the vote opens.
  */
-export async function advance(
-  backend: Backend,
-  step: FlowStep,
-  cycles: readonly Cycle[],
-  { canFlag }: { canFlag: boolean },
-) {
+export async function advance(backend: Backend, step: FlowStep, cycles: readonly Cycle[]) {
   const nominations =
     step.kind === 'declare' || step.kind === 'check'
       ? await readOnce<Nomination[]>((s) => backend.club.watchNominations(step.cycle.id, s))
@@ -187,7 +176,6 @@ export async function advance(
     cycles,
     nominations,
     checker: backend.checker,
-    canFlag,
   });
 }
 

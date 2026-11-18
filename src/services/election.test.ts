@@ -188,13 +188,9 @@ describe('the review before the vote', () => {
     const twice = `${await answerAs(backend, cycleId, 'julia', makeBook({ title: 'Dom Casmurro, Machado' }))}`;
     const torto = `${await answerAs(backend, cycleId, 'teo', makeBook({ title: 'Torto Arado' }))}`;
     for (const uid of ['bruno', 'lia', 'marina']) await answerAs(backend, cycleId, uid, null);
-    // A member's device opens the list but leaves the flags to the organizer's.
+    // Any member's device runs the check and records what it found.
     await settle(backend);
     let cycle = await cycleOf(backend, cycleId);
-    expect(cycle.review).toEqual({ conflicts: null });
-    await settle(backend, 'marina');
-
-    cycle = await cycleOf(backend, cycleId);
     expect(cycle.status).toBe('nominating');
     expect(cycle.review?.conflicts).toEqual([
       { ids: [dom, twice], reason: 'Mesmo título: Dom Casmurro.' },
@@ -265,7 +261,6 @@ describe('the duplicate check', () => {
       cycles: [],
       nominations: LIST,
       checker,
-      canFlag: true,
     });
     return { seen: seen[0], recorded: recorded[0] };
   }

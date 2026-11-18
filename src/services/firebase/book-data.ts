@@ -1,4 +1,4 @@
-import { normalizeBook, validateBook, type BookError } from '@/domain/book';
+import { isSecureLink, normalizeBook, validateBook, type BookError } from '@/domain/book';
 import type { Book } from '@/domain/types';
 
 export class InvalidBookError extends Error {
@@ -19,6 +19,13 @@ function encodeLink(link: string | null): string | null {
   } catch {
     return link;
   }
+}
+
+/** A reading's link as the rules accept it (or null to clear it). Throws if invalid. */
+export function toLinkData(link: string | null): string | null {
+  const clean = link?.trim() ? link.trim() : null;
+  if (clean !== null && !isSecureLink(clean)) throw new InvalidBookError(['synopsis-link-invalid']);
+  return encodeLink(clean);
 }
 
 /** The exact shape `firestore.rules` accepts for a book. Throws if invalid. */

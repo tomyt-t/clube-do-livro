@@ -8,7 +8,13 @@ import type { FirebaseServices } from './app';
 import { toCycle, toMember, toNomination, toOwnAnswer, toSettings } from './converters';
 import { guard } from './errors';
 import { dataOf, listenToDoc, listenToQuery } from './listen';
-import { answerNominationCall, castBallot, markFinished, saveMemberProfile } from './member-writes';
+import {
+  answerNominationCall,
+  castBallot,
+  markFinished,
+  saveMemberProfile,
+  setReadingLink,
+} from './member-writes';
 import { refs } from './refs';
 
 export function createFirebaseClub({ db }: FirebaseServices): ClubPort {
@@ -50,6 +56,8 @@ export function createFirebaseClub({ db }: FirebaseServices): ClubPort {
     saveProfile: ({ uid, name, photoURL }) => guard(saveMemberProfile(db, uid, { name, photoURL })),
 
     answerNominationCall: (input) => guard(answerNominationCall(db, input)),
+
+    setReadingLink: ({ cycleId, link }) => guard(setReadingLink(db, cycleId, link)),
 
     castBallot: (input) => guard(castBallot(db, input)),
 

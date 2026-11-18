@@ -13,6 +13,7 @@ import { PageSide } from '@/ui/Page';
 
 import styles from './CurrentReading.module.css';
 import { FinishedReading } from './FinishedReading';
+import { ReadingLink } from './ReadingLink';
 import { ReadingSynopsis } from './ReadingSynopsis';
 
 /** Long titles step down a size so they do not break mid-word on a phone. */
@@ -77,6 +78,7 @@ export function CurrentReading({ cycle, winner }: CurrentReadingProps) {
           </a>
         </div>
       )}
+      <ReadingLink cycle={cycle} link={synopsisUrl} />
       {cycle.status === 'reading' && (
         <PageSide>
           <FinishedReading cycle={cycle} />

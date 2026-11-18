@@ -123,11 +123,19 @@ const PAST_CYCLES: PastCycle[] = [
   },
 ];
 
+/** Júlia nominated the book being read: as her, the demo shows how its link can change. */
+const READING_NOMINATOR = 'julia';
+
 function seedPastCycle(state: DemoState, now: Date, past: PastCycle) {
   const cycle = pastCycle(now, past);
   state.cycles[cycle.id] = cycle;
   state.nominations[cycle.id] = nominations(cycle.options as BookKey[]);
   state.tallies[cycle.id] = cycle.results ?? undefined;
+  if (past.finishedDaysAgo === null) {
+    state.answers[cycle.id] = {
+      [READING_NOMINATOR]: { kind: 'nominated', nominationId: past.winner },
+    };
+  }
 }
 
 export function createDemoState(

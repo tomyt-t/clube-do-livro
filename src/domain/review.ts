@@ -129,3 +129,16 @@ export function canLetGo(id: NominationId, merged: Merged): boolean {
 export function withoutGroup(groups: readonly ConflictGroup[], index: number): ConflictGroup[] {
   return groups.filter((_, at) => at !== index);
 }
+
+/**
+ * Whether the member nominated the reading the round chose (or a reading
+ * merged into it): they may change its link. Known only to themselves.
+ */
+export function isReadingNominator(
+  answer: OwnAnswer | null,
+  cycle: Pick<Cycle, 'merged' | 'winner'>,
+): boolean {
+  if (answer?.kind !== 'nominated' || cycle.winner === null) return false;
+  const own = answer.nominationId;
+  return (cycle.merged[own] ?? own) === cycle.winner.nominationId;
+}

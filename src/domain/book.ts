@@ -58,7 +58,8 @@ export function normalizeBook(book: Book): Book {
   };
 }
 
-function isSecureLink(value: string): boolean {
+/** A full https link within the size the rules accept. */
+export function isSecureLink(value: string): boolean {
   if (value.length > BOOK_LIMITS.link) return false;
   try {
     return new URL(value).protocol === 'https:';

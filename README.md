@@ -38,7 +38,8 @@ Toda a segurança está em [`firestore.rules`](firestore.rules), com testes de a
 - **Indicações:** não guardam quem indicou. Até todos responderem, cada pessoa lê só a própria;
   nem quem organiza vê as outras. A única exceção é a conferência: quem organiza pode ver quem
   indicou as leituras marcadas como repetidas (e só essas, no máximo três grupos pequenos),
-  para conversar com essas pessoas. Só o aparelho de quem organiza grava essas marcações. Para
+  para conversar com essas pessoas. As regras limitam quantas leituras dá para marcar na rodada
+  inteira: um par, ou até metade da lista. Para
   recusar um título repetido, cada título indicado deixa um registro que dá para consultar um a
   um, mas nunca listar.
 - **Votos:** cada cédula cria um recibo vazio (diz só _que_ a pessoa votou) e soma numa
@@ -60,8 +61,9 @@ O que as regras não conseguem impedir, e por quê:
   votar outra vez na rodada) e decidir que duas leituras são a mesma. Ainda assim, as regras
   limitam quantas leituras dá para marcar por rodada e não deixam abrir a votação antes de quem
   foi liberado responder (ou de passarem 3 dias).
-- **A conferência com o Gemini roda no navegador:** um app adulterado pode pular essa etapa.
-  Títulos idênticos continuam bloqueados pelas regras; só as variações escapariam.
+- **A conferência com o Gemini roda no navegador:** um app adulterado pode pular essa etapa
+  (títulos idênticos continuam bloqueados pelas regras; só as variações escapariam) ou marcar
+  leituras à toa, dentro do limite da rodada, o que mostra a quem organiza quem as indicou.
 - **Contagem parcial:** ao votar, um app adulterado pode tentar valores até acertar a contagem
   atual das leituras em que votou. Fica sabendo só disso, só uma vez, e o voto vale normalmente.
 - **Ordem de chegada:** a lista guarda as indicações na ordem em que chegaram, então quem

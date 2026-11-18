@@ -94,10 +94,10 @@ describe('the list during the review', () => {
     await assertFails(recordReview(dbAs(env, caio), CYCLE, []));
   });
 
-  it('lets any member record that nothing was found, but only the organizer flag', async () => {
+  it("lets any member's device record what the check found, flags included", async () => {
     await seedAnswered(env, { review: { ids: null, groups: [] } });
-    await assertFails(recordReview(dbAs(env, caio), CYCLE, FLAGGED));
-    await assertSucceeds(recordReview(dbAs(env, caio), CYCLE, []));
+    await assertSucceeds(recordReview(dbAs(env, caio), CYCLE, FLAGGED));
+    await assertFails(recordReview(dbAs(env, caio), CYCLE, []));
   });
 
   it('starts only once everyone answered, even for the organizer', async () => {

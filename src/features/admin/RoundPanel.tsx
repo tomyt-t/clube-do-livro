@@ -171,8 +171,7 @@ function viewOf(round: Round, context: Context): RoundView {
         action: {
           label: 'Apurar agora',
           confirm: null,
-          run: () =>
-            advance(backend, { kind: 'declare', cycle: round.cycle }, cycles, { canFlag: true }),
+          run: () => advance(backend, { kind: 'declare', cycle: round.cycle }, cycles),
         },
       };
     case 'reading':

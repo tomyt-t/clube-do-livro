@@ -16,7 +16,7 @@ import { everyone } from '@/domain/flow';
 
 import type { AdminPort, FlowPort } from '../backend';
 
-import { deny, isAdmin, pause, requireAdmin, requireMember, type DemoContext } from './context';
+import { deny, pause, requireAdmin, requireMember, type DemoContext } from './context';
 import type { DemoState } from './state';
 
 /** Mirrors `firestore.rules`: the review is open while nominating, once it has started. */
@@ -156,8 +156,6 @@ export function reviewSteps(context: DemoContext, members: () => number): Review
       requireMember(context);
       const cycle = reviewingCycle(store.current, cycleId);
       if (cycle.review?.conflicts !== null || !isValidGroups(cycle, groups)) deny();
-      // Flags reveal nominators to the organizer: only the organizer's device records them.
-      if (groups.length > 0 && !isAdmin(context)) deny();
       const flagged = flaggedAfter(cycle, groups) ?? deny();
       store.update((state) => {
         const target = reviewingCycle(state, cycleId);

@@ -14,7 +14,7 @@ import {
 import { titleKey } from '@/domain/title-key';
 import type { CycleId, MemberId, NominationAnswer, NominationId } from '@/domain/types';
 
-import { toBookData } from './book-data';
+import { toBookData, toLinkData } from './book-data';
 import { refs } from './refs';
 
 /**
@@ -136,4 +136,9 @@ export async function markFinished(db: Firestore, cycleId: CycleId, uid: MemberI
   batch.set(refs.reader(db, cycleId, uid), {});
   batch.update(refs.cycle(db, cycleId), { finishedReaders: increment(1) });
   await batch.commit();
+}
+
+/** Sets or clears the link of the reading the member nominated (see `isReadingNominator`). */
+export async function setReadingLink(db: Firestore, cycleId: CycleId, link: string | null) {
+  await updateDoc(refs.cycle(db, cycleId), { 'winner.book.synopsisUrl': toLinkData(link) });
 }

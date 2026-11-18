@@ -1,0 +1,33 @@
+/* The nominator's link editor: a quiet line under the reading's link, aligned with it. */
+.offer {
+  margin-block-start: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+/* Styled like the synopsis' own text buttons ("Ler mais", "Abrir o link"). */
+.textButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.hint {
+  color: var(--ink-2);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-3);
+  max-inline-size: 36rem;
+  margin-block-start: var(--space-4);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}

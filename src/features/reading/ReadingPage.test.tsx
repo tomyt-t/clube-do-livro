@@ -157,3 +157,36 @@ describe('Acabei de ler!', () => {
     expect(MEMBERS).toHaveLength(6);
   });
 });
+
+describe('ReadingPage, the link of the reading', () => {
+  async function readingBy(uid: string) {
+    const backend = emptyClub();
+    await soloRound(backend, makeBook({ title: 'Torto Arado', synopsisUrl: null }));
+    return { ...renderAsMember(<ReadingPage />, uid, { backend }), backend };
+  }
+
+  it('lets only whoever nominated the reading add or change its link', async () => {
+    const { user } = await readingBy('rafa');
+    await user.click(await screen.findByRole('button', { name: 'Adicionar um link' }));
+    const field = screen.getByLabelText('Link da leitura');
+
+    await user.type(field, 'pt.wikipedia.org/wiki/Torto_Arado');
+    await user.click(screen.getByRole('button', { name: 'Salvar' }));
+    expect(screen.getByText('Use um link completo, começando com https://.')).toBeInTheDocument();
+
+    await user.clear(field);
+    await user.type(field, 'https://pt.wikipedia.org/wiki/Torto_Arado');
+    await user.click(screen.getByRole('button', { name: 'Salvar' }));
+    const link = await screen.findByRole('link', { name: /pt\.wikipedia\.org/ });
+    expect(link).toHaveAttribute('href', 'https://pt.wikipedia.org/wiki/Torto_Arado');
+    expect(screen.getByRole('button', { name: 'Trocar o link' })).toBeInTheDocument();
+  });
+
+  it('shows nothing to edit to anyone else', async () => {
+    await readingBy('lia');
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Torto Arado' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /link/ })).not.toBeInTheDocument();
+  });
+});

@@ -1,6 +1,6 @@
 import { isPastDeadline } from '@/domain/cycle';
-import { normalizeBook, validateBook } from '@/domain/book';
-import { ballotSeat, isLetGo } from '@/domain/review';
+import { isSecureLink, normalizeBook, validateBook } from '@/domain/book';
+import { ballotSeat, isLetGo, isReadingNominator } from '@/domain/review';
 import { addBallot } from '@/domain/tally';
 import { titleKey } from '@/domain/title-key';
 import type { Cycle, CycleId, NominationAnswer, NominationId, VoteResults } from '@/domain/types';
@@ -168,6 +168,27 @@ function nominationReads(
   };
 }
 
+/** Mirrors `editsReadingLink`: only the reading's nominator, only its link, while it is read. */
+async function setReadingLink(
+  context: DemoContext,
+  { cycleId, uid, link }: Parameters<ClubPort['setReadingLink']>[0],
+) {
+  await pause(context);
+  requireSelf(context, uid);
+  const cycle = cycleOf(context, cycleId);
+  const answer = context.store.current.answers[cycleId]?.[uid] ?? null;
+  const clean = link?.trim() ? link.trim() : null;
+  const open = cycle.status === 'reading' || cycle.status === 'upcoming';
+  if (!open || !isReadingNominator(answer, cycle)) deny();
+  if (clean !== null && !isSecureLink(clean)) {
+    throw new BackendError('invalid-data', 'Link inválido.');
+  }
+  context.store.update((state) => {
+    const winner = state.cycles[cycleId]?.winner;
+    if (winner) winner.book = { ...winner.book, synopsisUrl: clean };
+  });
+}
+
 export function createDemoClub(context: DemoContext): ClubPort {
   const { store } = context;
 
@@ -219,6 +240,8 @@ export function createDemoClub(context: DemoContext): ClubPort {
       });
       return nomination?.id ?? null;
     },
+
+    setReadingLink: (input) => setReadingLink(context, input),
 
     castBallot: async (input) => {
       await pause(context);

@@ -222,6 +222,7 @@ service cloud.firestore {
       allow update: if isMember()
         && (countsOwnPart(cycleId, resource.data, request.resource.data)
           || isFlowStep(cycleId, resource.data, request.resource.data)
+          || editsReadingLink(cycleId, resource.data, request.resource.data)
           || (isAdmin() && isValidTransition(cycleId, resource.data, request.resource.data)));
       // A cycle can be dropped only before anyone answered: its answers and
       // titles would outlive it and lock members out of a new one.
@@ -508,6 +509,21 @@ service cloud.firestore {
         && isFinishingNow(c);
     }
 
+    // ---------------------------------------------------------- reading link
+    // Whoever nominated the reading (or a reading merged into it) may set or
+    // clear its link while it is read or waits its turn. Nothing else
+    // changes, and nothing says who did it.
+
+    function editsReadingLink(c, before, after) {
+      let own = ownNomination(c);
+      return before.status in ['reading', 'upcoming']
+        && changesOnly(['winner'])
+        && after.winner.diff(before.winner).affectedKeys().hasOnly(['book'])
+        && after.winner.book.diff(before.winner.book).affectedKeys().hasOnly(['synopsisUrl'])
+        && (after.winner.book.synopsisUrl == null || isLink(after.winner.book.synopsisUrl))
+        && before.merged.get(own, own) == before.winner.nominationId;
+    }
+
     // ------------------------------------------------------------- flow steps
     // Any member, once everyone has done their part. Declaring the winner is
     // fully checked, so anyone may do it as soon as the vote is closed.
@@ -675,19 +691,18 @@ service cloud.firestore {
           .union(idsOf(groups, 2).toSet());
     }
 
-    // What the check found, recorded once. Anyone may record that it found
-    // nothing; only the organizer may record flags (they reveal nominators to
-    // the organizer alone). Readings already merged are not checked again.
-    // Every reading flagged in the round is kept in `flagged`: no more than
-    // one pair, or half the list, over the whole round, so a check that flags
-    // much (or again and again) is not believed.
+    // What the check found, recorded once, by whichever member's device ran
+    // it first. Flags let the organizer see who nominated those readings, so
+    // they are capped: every reading flagged in the round is kept in
+    // `flagged`, no more than one pair or half the list over the whole round,
+    // and a check that flags much (or again and again) is not believed.
+    // Readings already merged are not checked again.
     function recordsReview(before, after) {
       return before.status == 'nominating' && before.review != null
         && before.review.ids == null
         && changesOnly(['review', 'flagged'])
         && isReviewData(after.review, before.nominationIds)
         && !after.review.ids.hasAny(before.merged.keys())
-        && (after.review.ids.size() == 0 || isAdmin())
         && after.flagged == before.flagged.concat(after.review.ids.removeAll(before.flagged))
         && (after.flagged.size() <= 2 || after.flagged.size() * 2 <= before.nominationIds.size());
     }

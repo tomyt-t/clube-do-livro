@@ -174,9 +174,9 @@ vezes com nomes diferentes ("Dom Casmurro" e "Dom Casmurro, Machado de Assis"). 
 fica marcado para quem organiza decidir: juntar numa só, liberar alguém para trocar ou manter
 separadas. Sem isto, a votação abre direto (títulos idênticos já são recusados no envio).
 
-As marcações só são gravadas pelo aparelho de quem organiza: nos outros, a conferência só pode
-dizer que não achou nada. Então, se houver repetidas, a votação espera você abrir o site. Uma
-pessoa liberada para trocar indica de novo vendo a lista, e a votação espera por ela até 3 dias.
+A conferência roda no aparelho do primeiro membro que abrir o site depois que todos responderem,
+e o resultado fica gravado; você não precisa estar on-line. Uma pessoa liberada para trocar
+indica de novo vendo a lista, e a votação espera por ela até 3 dias.
 
 O Firebase AI Logic não sabe quem é do clube: sem o App Check, qualquer pessoa usaria a sua cota
 do Gemini com a configuração pública do site. Por isso o site só liga a conferência quando o App
