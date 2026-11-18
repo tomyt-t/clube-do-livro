@@ -14,12 +14,15 @@ export function useAllowlist(): Watched<AllowlistEntry[]> {
 
 /**
  * Keeps "everyone" in step with the allowlist: whenever the organizer has
- * this page open and the two disagree, the count is corrected.
+ * this page open and the two disagree, the count is corrected. It never
+ * drops by more than one at a time: a lower count can close a vote early,
+ * and people are removed one by one, so a bigger drop means a partial list.
  */
 export function useMemberCountSync(listed: number | null, counted: number | null) {
   const { admin } = useBackend();
   useEffect(() => {
     if (listed === null || counted === null || listed === counted || listed === 0) return;
+    if (listed < counted - 1) return;
     admin.setMemberCount(listed).catch(() => {
       // Tried again on the next change; nothing else depends on it right now.
     });

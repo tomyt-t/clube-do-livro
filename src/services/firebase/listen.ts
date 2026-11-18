@@ -42,6 +42,30 @@ export function listenToQuery<T>(
   );
 }
 
+/**
+ * Like `listenToQuery`, but only with results the server confirmed. A query
+ * may first answer from the local cache with just the documents this tab
+ * already read (say, the member's own allowlist entry): fine for display,
+ * wrong for anything that counts them.
+ */
+export function listenToServerQuery<T>(
+  query: Query,
+  read: Reader<T>,
+  subscriber: Subscriber<T[]>,
+): Unsubscribe {
+  return onSnapshot(
+    query,
+    { includeMetadataChanges: true },
+    (snapshot) => {
+      if (snapshot.metadata.fromCache) return;
+      subscriber.next(readAll(snapshot.docs, read));
+    },
+    (error) => {
+      subscriber.error(toBackendError(error));
+    },
+  );
+}
+
 export function listenToDoc<T>(
   ref: DocumentReference,
   read: (snapshot: DocumentSnapshot) => T,
