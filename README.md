@@ -94,12 +94,24 @@ No demo, a barra do topo troca de membro e de etapa (Indicações, Votação, Le
 experimentar cada tela.
 
 `dev:emulator` roda o código do site publicado contra os emuladores do Firebase: login, banco
-e as mesmas `firestore.rules`, sem tocar no projeto real nem gastar cota. Ele não usa App
-Check, Gemini nem a chave do Google Books (sem ela, o Google Livros fica fora da busca). A lista começa com `organizador@exemplo.com`
-(organizador), `ana@`, `bia@` e `caio@exemplo.com`. Para entrar, use "Entrar com Google" e,
-no popup do emulador, "Add new account" com um desses emails. Os dados ficam em
-`.emulator-data/` ao sair com Ctrl+C; apague a pasta para recomeçar. O painel dos emuladores
-fica em http://127.0.0.1:4000.
+e as mesmas `firestore.rules`, sem tocar no projeto real. Precisa de Java 21 (no PATH ou em
+`JAVA_HOME`). A lista começa com `organizador@exemplo.com` (organizador), `ana@`, `bia@` e
+`caio@exemplo.com`. Para entrar, use "Entrar com Google" e, no popup do emulador, "Add new
+account" com um desses emails. Os dados ficam em `.emulator-data/` ao sair com Ctrl+C; apague a
+pasta para recomeçar. O painel dos emuladores fica em http://127.0.0.1:4000.
+
+Sem mais nada, o Google Livros e o Gemini ficam de fora. Para usar as chaves do site, crie
+`.env.emulator.local` (ignorado pelo git) com `VITE_GOOGLE_BOOKS_API_KEY`, `VITE_APPCHECK_SITE_KEY`,
+`VITE_AI_MODEL`, a configuração do projeto real em `VITE_LIVE_FIREBASE_API_KEY`,
+`VITE_LIVE_FIREBASE_AUTH_DOMAIN`, `VITE_LIVE_FIREBASE_PROJECT_ID` e `VITE_LIVE_FIREBASE_APP_ID`, e
+um `VITE_APPCHECK_DEBUG_TOKEN` (qualquer UUID). Login e banco continuam nos emuladores, mas essas
+chaves gastam as cotas do site. Duas liberações, uma vez:
+
+- na chave do Google Books (Google Cloud → APIs e serviços → Credenciais), adicione
+  `http://localhost:5173/*` aos sites permitidos;
+- no Firebase → App Check → app da Web → Gerenciar tokens de depuração, adicione o
+  `VITE_APPCHECK_DEBUG_TOKEN`. Quem tem esse token passa pelo App Check: não o publique e apague-o
+  quando não precisar mais.
 
 ## Como o código está organizado
 

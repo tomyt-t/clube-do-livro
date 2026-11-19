@@ -1,0 +1,113 @@
+.dialog {
+  inline-size: min(34rem, calc(100% - 1.5rem));
+  max-block-size: calc(100dvh - 1.5rem);
+  /* The global reset removes the margin that centers a modal dialog. */
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow:
+    0 0 0 1px var(--line-2),
+    0 30px 60px -30px rgb(0 0 0 / 0.5);
+  overflow: auto;
+}
+
+.dialog::backdrop {
+  background: rgb(14 19 34 / 0.62);
+}
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-4) var(--space-3);
+}
+
+.title {
+  font-size: var(--title-sm);
+}
+
+.lead {
+  color: var(--ink-2);
+}
+
+.tied {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tied li {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  inline-size: clamp(3.25rem, 22%, 6rem);
+  font-size: var(--text-xs);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.tied li > :first-child {
+  inline-size: 100%;
+}
+
+.result {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  padding-block: var(--space-2);
+  text-align: center;
+}
+
+.winnerCover {
+  inline-size: min(10rem, 46%);
+  margin-block-end: var(--space-3);
+  animation: crowned 0.7s var(--ease-out);
+}
+
+/* Gold for the winner, as everywhere in the club. */
+.kicker {
+  color: #b5851a;
+  font-weight: 650;
+}
+
+.winnerTitle {
+  font: 650 var(--title-sm) / 1.15 var(--serif);
+}
+
+.author {
+  color: var(--ink-2);
+}
+
+.caption {
+  max-inline-size: 28rem;
+  margin-block-start: var(--space-2);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+@keyframes crowned {
+  from {
+    opacity: 0;
+    transform: translateY(12%) scale(0.86);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .winnerCover {
+    animation: none;
+  }
+}

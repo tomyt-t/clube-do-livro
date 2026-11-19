@@ -15,6 +15,7 @@ import type {
   DecisionMethod,
   Nomination,
   OwnAnswer,
+  SynopsisDisplay,
   Tally,
   VoteResults,
   Winner,
@@ -38,6 +39,7 @@ const CYCLE_STATUSES: readonly CycleStatus[] = [
   'finished',
 ];
 const METHODS: readonly DecisionMethod[] = ['votes', 'first-choices', 'draw', 'unopposed'];
+const SYNOPSIS_DISPLAYS: readonly SynopsisDisplay[] = ['text', 'link'];
 
 function isRecord(value: unknown): value is Data {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -122,7 +124,16 @@ function toWinner(value: unknown): Winner | null {
   const decidedAt = dateOrNull(value.decidedAt);
   const nominationId = text(value.nominationId);
   if (!book || !method || !decidedAt || nominationId === '') return null;
-  return { nominationId, book, method, decidedAt, drawnFrom: textList(value.drawnFrom) };
+  return {
+    nominationId,
+    book,
+    method,
+    decidedAt,
+    drawnFrom: textList(value.drawnFrom),
+    // Set later by the reading's nominator, so older winners have neither.
+    display: oneOf(value.display, SYNOPSIS_DISPLAYS) ?? 'text',
+    pdfUrl: textOrNull(value.pdfUrl),
+  };
 }
 
 export function toCycle(id: string, data: Data): Cycle | null {

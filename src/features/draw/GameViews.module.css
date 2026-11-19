@@ -1,0 +1,251 @@
+/*
+ * The bar's floor, table and ring keep their colors in dark mode too: they
+ * are an illustration, like the club's others.
+ */
+
+/* ------------------------------------------------------------------- race */
+
+.race {
+  --lane: clamp(1.75rem, calc(48dvh / var(--lanes)), 5.5rem);
+  position: relative;
+  display: grid;
+  padding: 0.25rem 1.5rem 0.25rem 0.5rem;
+  border: 2px solid #1d1d20;
+  border-radius: var(--radius);
+  background: repeating-conic-gradient(#fbf6e8 0 25%, #e9dfc8 0 50%) 0 0 / 1.5rem 1.5rem;
+  overflow: hidden;
+}
+
+/* The finish line: a checkered strip near the right edge. */
+.race::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0.75rem;
+  inline-size: 0.5rem;
+  background: repeating-conic-gradient(#1d1d20 0 25%, #ffffff 0 50%) 0 0 / 0.5rem 0.5rem;
+}
+
+.lane {
+  position: relative;
+  block-size: var(--lane);
+  border-block-end: 1px dashed rgb(29 29 32 / 0.22);
+}
+
+.lane:last-child {
+  border-block-end: 0;
+}
+
+.runner {
+  position: absolute;
+  inset-block-end: 1px;
+  /* From the start to the line, the duck's own width included. */
+  inset-inline-start: calc(var(--at) * (100% - var(--lane) * 1.15));
+  z-index: 1;
+  inline-size: calc(var(--lane) * 1.15);
+  block-size: var(--lane);
+}
+
+.duck {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-end: 0;
+  inline-size: 100%;
+  animation: waddle 0.34s ease-in-out infinite alternate;
+}
+
+.rider {
+  position: absolute;
+  inset-inline-start: 20%;
+  inset-block-end: 46%;
+  z-index: 1;
+  inline-size: 34%;
+  transform: rotate(-7deg);
+}
+
+@keyframes waddle {
+  from {
+    transform: rotate(-4deg) translateY(0);
+  }
+
+  to {
+    transform: rotate(4deg) translateY(-6%);
+  }
+}
+
+/* ----------------------------------------------------------------- battle */
+
+.arena {
+  display: grid;
+  grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 1rem;
+  list-style: none;
+  border: 2px solid #1d1d20;
+  border-radius: var(--radius);
+  background: repeating-linear-gradient(90deg, #e2ad22 0 3.4rem, #c8951b 3.4rem 3.5rem);
+}
+
+.fighter {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  transition:
+    opacity 0.4s var(--ease-out),
+    filter 0.4s var(--ease-out),
+    transform 0.4s var(--ease-out);
+}
+
+.body {
+  position: relative;
+  inline-size: min(100%, 5.5rem);
+}
+
+.fighterCover {
+  inline-size: 100%;
+}
+
+.striking {
+  transform: translateY(-6%) scale(1.06);
+}
+
+.struck {
+  animation: shake 0.32s ease-in-out;
+}
+
+.damage {
+  position: absolute;
+  inset-block-start: 10%;
+  inset-inline: 0;
+  color: #e2532d;
+  font: 800 clamp(0.9rem, 4vw, 1.3rem) / 1 var(--sans);
+  text-align: center;
+  text-shadow:
+    0 0 3px #ffffff,
+    0 0 6px #ffffff;
+  animation: rise 0.6s var(--ease-out) forwards;
+}
+
+.health {
+  inline-size: min(100%, 5.5rem);
+  block-size: 0.45rem;
+  border: 1.5px solid #1d1d20;
+  border-radius: 999px;
+  background: #fbf6e8;
+  overflow: hidden;
+}
+
+.health > span {
+  display: block;
+  block-size: 100%;
+  transition: inline-size 0.25s var(--ease-out);
+}
+
+.out {
+  opacity: 0.4;
+  filter: grayscale(1);
+  transform: rotate(-8deg) translateY(6%);
+}
+
+@keyframes shake {
+  20% {
+    transform: translateX(-7%) rotate(-3deg);
+  }
+
+  50% {
+    transform: translateX(6%) rotate(2deg);
+  }
+
+  80% {
+    transform: translateX(-3%);
+  }
+}
+
+@keyframes rise {
+  to {
+    opacity: 0;
+    transform: translateY(-80%);
+  }
+}
+
+/* ------------------------------------------------------------------- sumo */
+
+.ring {
+  position: relative;
+  inline-size: min(100%, 22rem);
+  aspect-ratio: 1;
+  margin-inline: auto;
+}
+
+.clay {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+/* The pair moves with the point where they meet, up to the straw edge at 41%. */
+.pair {
+  position: absolute;
+  inset: 0;
+  transform: translateX(calc(var(--offset) * 41%));
+}
+
+.wrestler {
+  position: absolute;
+  inset-block-start: 31%;
+  inline-size: 34%;
+  transition: transform 0.45s var(--ease-out);
+}
+
+.left {
+  inset-inline-end: 49%;
+}
+
+.right {
+  inset-inline-start: 49%;
+}
+
+.wrestlerBody {
+  display: block;
+  inline-size: 100%;
+  animation: strain 0.28s ease-in-out infinite alternate;
+}
+
+.badge {
+  position: absolute;
+  inset-block-start: 28%;
+  inset-inline-start: 24%;
+  inline-size: 46%;
+  transform: rotate(-4deg);
+}
+
+.left.fallen {
+  transform: rotate(-40deg) translate(-25%, 15%);
+}
+
+.right.fallen {
+  transform: rotate(40deg) translate(25%, 15%);
+}
+
+@keyframes strain {
+  to {
+    transform: translateY(-3%);
+  }
+}
+
+/* Paused: every loop holds still with the match. */
+:global([data-paused]) .duck,
+:global([data-paused]) .wrestlerBody {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .duck,
+  .wrestlerBody,
+  .struck,
+  .damage {
+    animation: none;
+  }
+}

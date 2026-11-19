@@ -42,6 +42,13 @@
   font-size: var(--text-xs);
 }
 
+/* "Ver o sorteio" above how the draw came out. */
+.drawRow {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
 .draw {
   font-size: var(--text-sm);
 }

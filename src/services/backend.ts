@@ -11,6 +11,7 @@ import type {
   NominationId,
   OwnAnswer,
   RankedChoices,
+  ReadingMaterials,
   VoteResults,
 } from '@/domain/types';
 
@@ -111,8 +112,11 @@ export interface ClubPort {
   watchHasVoted(cycleId: CycleId, uid: MemberId, subscriber: Subscriber<boolean>): Unsubscribe;
   watchMembers(subscriber: Subscriber<MemberProfile[]>): Unsubscribe;
   saveProfile(profile: MemberProfile): Promise<void>;
-  /** Sets or clears the chosen reading's link; only its nominator may (see `isReadingNominator`). */
-  setReadingLink(input: { cycleId: CycleId; uid: MemberId; link: string | null }): Promise<void>;
+  /**
+   * The chosen reading's link, how its synopsis shows and its PDF link; only
+   * its nominator may set them (see `isReadingNominator`).
+   */
+  setReadingMaterials(input: { cycleId: CycleId; uid: MemberId } & ReadingMaterials): Promise<void>;
   /** Final: a member answers once per cycle. Returns the nomination id, if any. */
   answerNominationCall(input: AnswerInput): Promise<NominationId | null>;
   /** Final and anonymous: a member votes once per cycle. */

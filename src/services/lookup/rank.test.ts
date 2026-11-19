@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { rankSynopses, type SourcedSynopsis } from './rank';
+import { rankSynopses, summarize, type SourcedSynopsis } from './rank';
+import type { Candidate } from './types';
 
 const PT =
   'Bentinho e Capitu crescem juntos no Rio de Janeiro e, ainda muito jovens, prometem casar um com o outro, apesar dos planos da mãe dele.';
@@ -33,5 +34,43 @@ describe('rankSynopses', () => {
     expect(rankSynopses([found(PT, { source: 'wikipedia', part: 'introdução' })])[0]?.label).toBe(
       'Wikipédia · introdução',
     );
+  });
+});
+
+function edition(authors: string[], publisher: string | null = null): Candidate {
+  return {
+    source: 'open-library',
+    titles: ['Dom Casmurro'],
+    title: 'Dom Casmurro',
+    authors,
+    mentions: null,
+    publisher,
+    year: null,
+    isbn: null,
+    kind: 'book',
+    cover: null,
+    synopsis: null,
+  };
+}
+
+describe('summarize', () => {
+  it('names the author the catalogs agree on, not a stray co-author', () => {
+    const members = [
+      edition(['Adiel de Jesus', 'Machado ASSIS'], 'L&PM'),
+      edition(['Machado de Assis']),
+      edition(['Machado de Assis'], 'Antofágica'),
+    ].map((candidate) => ({ candidate, exact: true, author: true }));
+    expect(summarize({ key: 'dom casmurro', members, score: 0 }).authors).toEqual([
+      'Machado de Assis',
+    ]);
+  });
+
+  it('lists an author once, whatever the accents', () => {
+    const members = [edition(['Itamar Vieira Junior', 'Itamar Vieira Júnior'])].map(
+      (candidate) => ({ candidate, exact: true, author: true }),
+    );
+    expect(summarize({ key: 'torto arado', members, score: 0 }).authors).toEqual([
+      'Itamar Vieira Júnior',
+    ]);
   });
 });

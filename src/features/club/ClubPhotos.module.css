@@ -1,0 +1,68 @@
+/*
+ * Duotone: the grayscale photo is screened over the shadow color, then the
+ * light color is multiplied on top. Light theme: ink-blue shadows, paper
+ * highlights; dark theme: paper shadows, soft-blue highlights.
+ */
+.strip {
+  --duo-shadow: var(--accent);
+  --duo-light: var(--paper);
+
+  display: flex;
+  gap: 2px;
+  block-size: var(--strip-height, 4.5rem);
+  overflow: hidden;
+}
+
+/* Low specificity, so a parent's class can set the margins and the height (--strip-height). */
+:where(.strip) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.photo {
+  position: relative;
+  flex: 1 0 calc(var(--strip-height, 4.5rem) * 1.3);
+  max-inline-size: calc(var(--strip-height, 4.5rem) * 2);
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--duo-shadow);
+  isolation: isolate;
+}
+
+.photo img {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  filter: grayscale(1) contrast(1.1);
+  mix-blend-mode: screen;
+}
+
+.photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--duo-light);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .strip {
+    --duo-shadow: var(--paper);
+    --duo-light: var(--accent);
+  }
+}
+
+/* Windows high contrast: the photos as they are. */
+@media (forced-colors: active) {
+  .photo img {
+    filter: none;
+    mix-blend-mode: normal;
+  }
+
+  .photo::after {
+    content: none;
+  }
+}

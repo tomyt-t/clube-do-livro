@@ -13,7 +13,8 @@ import { PageSide } from '@/ui/Page';
 
 import styles from './CurrentReading.module.css';
 import { FinishedReading } from './FinishedReading';
-import { ReadingLink } from './ReadingLink';
+import { materialsOf, shownSynopsis } from './materials';
+import { ReadingMaterials } from './ReadingMaterials';
 import { ReadingSynopsis } from './ReadingSynopsis';
 
 /** Long titles step down a size so they do not break mid-word on a phone. */
@@ -24,10 +25,38 @@ interface CurrentReadingProps {
   winner: Winner;
 }
 
+function ExternalButton({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      className={buttonClass({ variant: 'secondary' })}
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <ExternalIcon width={18} height={18} />
+      {label}
+      <span className="visually-hidden"> (abre em outra aba)</span>
+    </a>
+  );
+}
+
+/** The synopsis link when its text is not shown, and the reading's PDF, if any. */
+function ReadingActions({ winner, showsText }: { winner: Winner; showsText: boolean }) {
+  const link = showsText ? null : winner.book.synopsisUrl;
+  const { pdfUrl } = materialsOf(winner);
+  if (!link && !pdfUrl) return null;
+  return (
+    <div className={styles.actions}>
+      {link && <ExternalButton href={link} label={withHost('Ler sinopse', link)} />}
+      {pdfUrl && <ExternalButton href={pdfUrl} label={withHost('Abrir o PDF', pdfUrl)} />}
+    </div>
+  );
+}
+
 export function CurrentReading({ cycle, winner }: CurrentReadingProps) {
   const titleId = useId();
   const { title, author } = splitTitle(winner.book.title);
-  const { synopsis, synopsisUrl } = winner.book;
+  const synopsis = shownSynopsis(winner);
 
   return (
     <article className={styles.reading} aria-labelledby={titleId}>
@@ -63,22 +92,8 @@ export function CurrentReading({ cycle, winner }: CurrentReadingProps) {
       </PageSide>
 
       {synopsis !== null && <ReadingSynopsis book={winner.book} text={synopsis} />}
-
-      {synopsis === null && synopsisUrl && (
-        <div className={styles.actions}>
-          <a
-            className={buttonClass({ variant: 'secondary' })}
-            href={synopsisUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <ExternalIcon width={18} height={18} />
-            {withHost('Ler sinopse', synopsisUrl)}
-            <span className="visually-hidden"> (abre em outra aba)</span>
-          </a>
-        </div>
-      )}
-      <ReadingLink cycle={cycle} link={synopsisUrl} />
+      <ReadingActions winner={winner} showsText={synopsis !== null} />
+      <ReadingMaterials cycle={cycle} winner={winner} />
       {cycle.status === 'reading' && (
         <PageSide>
           <FinishedReading cycle={cycle} />

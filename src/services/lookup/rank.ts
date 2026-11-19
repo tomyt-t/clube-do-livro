@@ -133,13 +133,32 @@ function detailsOf(candidate: Candidate): string {
   return [candidate.publisher, candidate.year].filter((part) => part !== null).join(', ');
 }
 
+/**
+ * The result whose authors the others agree with most, so a stray
+ * co-author or an odd spelling ("Adiel de Jesus, Machado ASSIS") loses to
+ * the name every catalog gives.
+ */
+function bestCredited(candidates: readonly Candidate[]): Candidate | undefined {
+  const credited = candidates.filter((c) => c.authors.length > 0);
+  const counts = new Map<string, number>();
+  for (const word of credited.flatMap((c) => [...surnames(c.authors)])) {
+    counts.set(word, (counts.get(word) ?? 0) + 1);
+  }
+  const agreement = (c: Candidate) => {
+    const words = [...surnames(c.authors)];
+    return words.reduce((sum, word) => sum + (counts.get(word) ?? 0), 0) / (words.length || 1);
+  };
+  return [...credited].sort((a, b) => agreement(b) - agreement(a))[0];
+}
+
 export function summarize(work: Work): WorkSummary {
   const candidates = work.members.map((m) => m.candidate);
-  const best = candidates.find((c) => c.authors.length > 0) ?? candidates[0];
+  const best = bestCredited(candidates) ?? candidates[0];
   const edition = candidates.find((c) => isBrazilianIsbn(c.isbn)) ?? best;
   return {
     title: best?.title ?? '',
-    authors: best?.authors ?? [],
+    // "Itamar Vieira Junior" and "Itamar Vieira Júnior" are one author.
+    authors: [...new Map((best?.authors ?? []).map((name) => [normalize(name), name])).values()],
     details: edition ? detailsOf(edition) : '',
   };
 }

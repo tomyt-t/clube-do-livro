@@ -151,24 +151,33 @@ function nominationReads(
   };
 }
 
-/** Mirrors `editsReadingLink`: only the reading's nominator, only its link, while it is read. */
-async function setReadingLink(
+function cleanLink(link: string | null): string | null {
+  const clean = link?.trim() ? link.trim() : null;
+  if (clean !== null && !isSecureLink(clean)) {
+    throw new BackendError('invalid-data', 'Link inválido.');
+  }
+  return clean;
+}
+
+/** Mirrors `editsReadingMaterials`: only the reading's nominator, only these, while it is read. */
+async function setReadingMaterials(
   context: DemoContext,
-  { cycleId, uid, link }: Parameters<ClubPort['setReadingLink']>[0],
+  { cycleId, uid, link, display, pdfUrl }: Parameters<ClubPort['setReadingMaterials']>[0],
 ) {
   await pause(context);
   requireSelf(context, uid);
   const cycle = cycleOf(context, cycleId);
   const answer = context.store.current.answers[cycleId]?.[uid] ?? null;
-  const clean = link?.trim() ? link.trim() : null;
   const open = cycle.status === 'reading' || cycle.status === 'upcoming';
   if (!open || !isReadingNominator(answer, cycle)) deny();
-  if (clean !== null && !isSecureLink(clean)) {
-    throw new BackendError('invalid-data', 'Link inválido.');
-  }
+  const synopsisUrl = cleanLink(link);
+  const pdf = cleanLink(pdfUrl);
   context.store.update((state) => {
     const winner = state.cycles[cycleId]?.winner;
-    if (winner) winner.book = { ...winner.book, synopsisUrl: clean };
+    if (!winner) return;
+    winner.book = { ...winner.book, synopsisUrl };
+    winner.display = display;
+    winner.pdfUrl = pdf;
   });
 }
 
@@ -224,7 +233,7 @@ export function createDemoClub(context: DemoContext): ClubPort {
       return nomination?.id ?? null;
     },
 
-    setReadingLink: (input) => setReadingLink(context, input),
+    setReadingMaterials: (input) => setReadingMaterials(context, input),
 
     castBallot: async (input) => {
       await pause(context);

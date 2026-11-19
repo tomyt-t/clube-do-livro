@@ -11,6 +11,11 @@ import { contentSecurityPolicy } from './vite-plugins/csp';
 export default defineConfig({
   base: './',
   plugins: [react(), contentSecurityPolicy()],
+  server: {
+    // The emulators' saves: watching them only reloads the page and, on
+    // Windows, holds the files so the save cannot finish.
+    watch: { ignored: ['**/.emulator-data/**', '**/firebase-export-*/**', '**/*-debug.log'] },
+  },
   build: {
     // The Firebase SDK (auth + Firestore) is its own chunk, ~580 kB before
     // compression (~175 kB gzipped). Anything larger is worth a look.

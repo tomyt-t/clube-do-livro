@@ -158,16 +158,19 @@ describe('Acabei de ler!', () => {
   });
 });
 
-describe('ReadingPage, the link of the reading', () => {
-  async function readingBy(uid: string) {
+describe('ReadingPage, the materials of the reading', () => {
+  async function readingBy(
+    uid: string,
+    book = makeBook({ title: 'Torto Arado', synopsis: null, synopsisUrl: null }),
+  ) {
     const backend = emptyClub();
-    await soloRound(backend, makeBook({ title: 'Torto Arado', synopsis: null, synopsisUrl: null }));
+    await soloRound(backend, book);
     return { ...renderAsMember(<ReadingPage />, uid, { backend }), backend };
   }
 
   it('lets only whoever nominated the reading add or change its link', async () => {
     const { user } = await readingBy('rafa');
-    await user.click(await screen.findByRole('button', { name: 'Adicionar um link' }));
+    await user.click(await screen.findByRole('button', { name: 'Editar link, sinopse e PDF' }));
     const field = screen.getByLabelText('Link da leitura');
 
     await user.type(field, 'pt.wikipedia.org/wiki/Torto_Arado');
@@ -179,7 +182,33 @@ describe('ReadingPage, the link of the reading', () => {
     await user.click(screen.getByRole('button', { name: 'Salvar' }));
     const link = await screen.findByRole('link', { name: /pt\.wikipedia\.org/ });
     expect(link).toHaveAttribute('href', 'https://pt.wikipedia.org/wiki/Torto_Arado');
-    expect(screen.getByRole('button', { name: 'Trocar o link' })).toBeInTheDocument();
+  });
+
+  it('adds a PDF link, and shows only the synopsis link when asked', async () => {
+    const { user } = await readingBy(
+      'rafa',
+      makeBook({
+        title: 'Torto Arado',
+        synopsis: 'Duas irmãs no sertão baiano.',
+        synopsisUrl: 'https://pt.wikipedia.org/wiki/Torto_Arado',
+      }),
+    );
+    expect(await screen.findByText('Duas irmãs no sertão baiano.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Editar link, sinopse e PDF' }));
+
+    await user.click(screen.getByRole('radio', { name: 'Só o link' }));
+    await user.type(screen.getByLabelText('Link do PDF'), 'http://drive.google.com/torto');
+    await user.click(screen.getByRole('button', { name: 'Salvar' }));
+    expect(screen.getByText('Use um link completo, começando com https://.')).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText('Link do PDF'));
+    await user.type(screen.getByLabelText('Link do PDF'), 'https://drive.google.com/torto');
+    await user.click(screen.getByRole('button', { name: 'Salvar' }));
+
+    const pdf = await screen.findByRole('link', { name: /Abrir o PDF/ });
+    expect(pdf).toHaveAttribute('href', 'https://drive.google.com/torto');
+    expect(screen.getByRole('link', { name: /Ler sinopse/ })).toBeInTheDocument();
+    expect(screen.queryByText('Duas irmãs no sertão baiano.')).not.toBeInTheDocument();
   });
 
   it('shows nothing to edit to anyone else', async () => {
@@ -187,6 +216,6 @@ describe('ReadingPage, the link of the reading', () => {
     expect(
       await screen.findByRole('heading', { level: 2, name: 'Torto Arado' }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /link/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Editar/ })).not.toBeInTheDocument();
   });
 });

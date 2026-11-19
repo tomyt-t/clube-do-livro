@@ -60,7 +60,27 @@ describe('toCycle', () => {
       ...winner,
       decidedAt: at,
       drawnFrom: ['a', 'n1'],
+      display: 'text',
+      pdfUrl: null,
     });
+  });
+
+  it("reads the nominator's materials, and ignores a display it does not know", () => {
+    const winner = {
+      nominationId: 'n1',
+      book: makeBook(),
+      method: 'votes',
+      decidedAt: stamp,
+      drawnFrom: [],
+      display: 'link',
+      pdfUrl: 'https://drive.google.com/file/d/1/view',
+    };
+    expect(toCycle('c3', { ...raw, winner })?.winner).toMatchObject({
+      display: 'link',
+      pdfUrl: 'https://drive.google.com/file/d/1/view',
+    });
+    const odd = { ...winner, display: 'hidden' };
+    expect(toCycle('c3', { ...raw, winner: odd })?.winner?.display).toBe('text');
   });
 
   it('skips cycles with an unknown status or no creation date', () => {

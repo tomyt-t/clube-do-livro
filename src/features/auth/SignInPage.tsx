@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { useConfig } from '@/app/services';
 import clubScene from '@/assets/illustrations/boteco-clube.svg';
+import { ClubPhotos } from '@/features/club/ClubPhotos';
 import { Button } from '@/ui/Button';
 import { describeError } from '@/ui/describe-error';
 import { GoogleMark } from '@/ui/icons';
@@ -67,6 +68,7 @@ export function SignInPage() {
         <EmailLinkForm />
         <p className={styles.fine}>Você continua conectado neste aparelho até sair.</p>
       </div>
+      <ClubPhotos className={styles.photos} />
     </main>
   );
 }

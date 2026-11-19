@@ -12,7 +12,13 @@ import {
 } from 'firebase/firestore';
 
 import { titleKey } from '@/domain/title-key';
-import type { CycleId, MemberId, NominationAnswer, NominationId } from '@/domain/types';
+import type {
+  CycleId,
+  MemberId,
+  NominationAnswer,
+  NominationId,
+  ReadingMaterials,
+} from '@/domain/types';
 
 import { toBookData, toLinkData } from './book-data';
 import { refs } from './refs';
@@ -137,7 +143,19 @@ export async function markFinished(db: Firestore, cycleId: CycleId, uid: MemberI
   await batch.commit();
 }
 
-/** Sets or clears the link of the reading the member nominated (see `isReadingNominator`). */
-export async function setReadingLink(db: Firestore, cycleId: CycleId, link: string | null) {
-  await updateDoc(refs.cycle(db, cycleId), { 'winner.book.synopsisUrl': toLinkData(link) });
+/**
+ * The materials of the reading the member nominated (see
+ * `isReadingNominator`): its link, whether the page shows the synopsis text
+ * or only that link, and a link to its PDF.
+ */
+export async function setReadingMaterials(
+  db: Firestore,
+  cycleId: CycleId,
+  { link, display, pdfUrl }: ReadingMaterials,
+) {
+  await updateDoc(refs.cycle(db, cycleId), {
+    'winner.book.synopsisUrl': toLinkData(link),
+    'winner.display': display,
+    'winner.pdfUrl': toLinkData(pdfUrl),
+  });
 }

@@ -20,6 +20,7 @@ firestore-debug.log
 ui-debug.log
 auth-debug.log
 .emulator-data/
+firebase-export-*/
 
 # Test output
 coverage/

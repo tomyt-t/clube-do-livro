@@ -50,6 +50,16 @@ export type CycleStatus =
  */
 export type DecisionMethod = 'votes' | 'first-choices' | 'draw' | 'unopposed';
 
+/** How the reading page shows the synopsis: its text, or only the link to it. */
+export type SynopsisDisplay = 'text' | 'link';
+
+/** What the reading's nominator manages on its page. */
+export interface ReadingMaterials {
+  link: string | null;
+  display: SynopsisDisplay;
+  pdfUrl: string | null;
+}
+
 export interface Winner {
   nominationId: NominationId;
   book: Book;
@@ -57,6 +67,10 @@ export interface Winner {
   decidedAt: Date;
   /** For a draw: the tied books in draw order, so anyone can check it. */
   drawnFrom: NominationId[];
+  /** Chosen by the reading's nominator; missing means the text. */
+  display?: SynopsisDisplay;
+  /** A link to the reading's PDF, added by its nominator; missing means none. */
+  pdfUrl?: string | null;
 }
 
 /** Counts per nomination. */

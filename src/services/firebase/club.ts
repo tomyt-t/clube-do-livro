@@ -11,7 +11,7 @@ import {
   castBallot,
   markFinished,
   saveMemberProfile,
-  setReadingLink,
+  setReadingMaterials,
 } from './member-writes';
 import { refs } from './refs';
 
@@ -52,7 +52,8 @@ export function createFirebaseClub({ db }: FirebaseServices): ClubPort {
 
     answerNominationCall: (input) => guard(answerNominationCall(db, input)),
 
-    setReadingLink: ({ cycleId, link }) => guard(setReadingLink(db, cycleId, link)),
+    setReadingMaterials: ({ cycleId, link, display, pdfUrl }) =>
+      guard(setReadingMaterials(db, cycleId, { link, display, pdfUrl })),
 
     castBallot: (input) => guard(castBallot(db, input)),
 

@@ -1,6 +1,7 @@
 import { findCurrentReading } from '@/domain/cycle';
 import type { Cycle } from '@/domain/types';
 import { useCycles } from '@/features/club/use-club';
+import { DrawGate } from '@/features/draw/DrawGate';
 import { EmptyState } from '@/ui/EmptyState';
 import { Notice } from '@/ui/Notice';
 import { Page } from '@/ui/Page';
@@ -22,6 +23,7 @@ function ReadingOverview({ cycles }: { cycles: readonly Cycle[] }) {
         </EmptyState>
       )}
       <NextReadingSection cycles={cycles} />
+      <DrawGate cycles={cycles} />
     </>
   );
 }

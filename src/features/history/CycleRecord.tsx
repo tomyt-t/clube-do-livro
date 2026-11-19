@@ -5,6 +5,7 @@ import { drawNumber } from '@/domain/draw';
 import type { Nomination } from '@/domain/types';
 import { CHOSEN } from '@/features/club/methods';
 import { useMemberCount, useNominations } from '@/features/club/use-club';
+import { DrawReplay } from '@/features/draw/DrawGate';
 import { BookCover } from '@/ui/BookCover';
 import { peopleOutOf, VOTED } from '@/ui/format';
 
@@ -74,7 +75,12 @@ export function CycleRecord({ cycle, anchor }: { cycle: DecidedCycle; anchor: st
           caption={peopleOutOf(cycle.ballots, members, VOTED).replace(/\.$/, '')}
         />
       )}
-      {cycle.winner.method === 'draw' && <DrawNote cycle={cycle} nominations={loaded} />}
+      {cycle.winner.method === 'draw' && (
+        <div className={styles.drawRow}>
+          <DrawReplay cycle={cycle} />
+          <DrawNote cycle={cycle} nominations={loaded} />
+        </div>
+      )}
     </section>
   );
 }

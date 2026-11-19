@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth';
 import { connectFirestoreEmulator, getFirestore, type Firestore } from 'firebase/firestore';
 
-import type { FirebaseConfig } from '@/config/env';
+import type { FirebaseConfig, LiveConfig } from '@/config/env';
 
 export interface FirebaseServices {
   app: FirebaseApp;
@@ -53,4 +53,20 @@ export function initFirebase(
   }
 
   return { app, auth, db };
+}
+
+/**
+ * On the emulators only: a second app on the real project, used by Gemini
+ * alone. App Check runs in debug mode there, with the token registered in
+ * the Firebase console (the site key accepts only the site's domain).
+ */
+export function initLiveApp(live: LiveConfig): FirebaseApp {
+  // App Check reads this global when it starts; `true` prints a new token to the console.
+  Object.assign(globalThis, { FIREBASE_APPCHECK_DEBUG_TOKEN: live.appCheckDebugToken ?? true });
+  const app = initializeApp(live.firebase, 'projeto-real');
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(live.appCheckSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+  return app;
 }

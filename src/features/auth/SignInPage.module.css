@@ -128,3 +128,30 @@
     padding-block-start: 0;
   }
 }
+
+/* The club's photos, only when there are any: a low strip under the ways in. */
+.photos {
+  --strip-height: 3.75rem;
+
+  flex: none;
+  margin-block-end: var(--space-5);
+}
+
+@media (min-width: 60rem) {
+  .page:has(> .photos) {
+    grid-template-rows: auto 1fr auto auto auto 1fr auto;
+    grid-template-areas:
+      'mast mast'
+      'scene .'
+      'scene title'
+      'scene lede'
+      'scene access'
+      'scene .'
+      'photos photos';
+  }
+
+  .photos {
+    grid-area: photos;
+    margin-block: var(--space-6) 0;
+  }
+}

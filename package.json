@@ -23,7 +23,7 @@
     "eval:duplicates": "vitest run src/services/duplicates/gemini.eval.test.ts",
     "test:rules": "firebase emulators:exec --only firestore --project demo-clube-do-livro \"vitest run --config vitest.rules.config.ts\"",
     "dev:demo": "vite --mode demo",
-    "dev:emulator": "firebase emulators:exec --only auth,firestore --ui --project demo-clube-do-livro --import .emulator-data --export-on-exit .emulator-data \"node scripts/emulator-seed.ts && vite --mode emulator\"",
+    "dev:emulator": "node scripts/dev-emulator.ts",
     "illustrations": "node scripts/illustrations/build.js"
   },
   "dependencies": {

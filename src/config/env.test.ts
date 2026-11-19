@@ -18,6 +18,7 @@ describe('readConfig', () => {
       appCheckSiteKey: null,
       aiModel: null,
       emulators: false,
+      live: null,
       firebase: {
         apiKey: 'key',
         authDomain: 'clube.firebaseapp.com',
@@ -43,14 +44,8 @@ describe('readConfig', () => {
     });
   });
 
-  it('points at the local emulators only with a demo project, spending no quota', () => {
-    const local = {
-      ...firebaseEnv,
-      VITE_FIREBASE_EMULATORS: 'true',
-      VITE_GOOGLE_BOOKS_API_KEY: 'books',
-      VITE_APPCHECK_SITE_KEY: 'site-key',
-      VITE_AI_MODEL: 'gemini-3.5-flash-lite',
-    };
+  it('points at the local emulators only with a demo project', () => {
+    const local = { ...firebaseEnv, VITE_FIREBASE_EMULATORS: 'true' };
     expect(() => readConfig(local)).toThrow(/demo-/);
     expect(readConfig({ ...local, VITE_FIREBASE_PROJECT_ID: 'demo-clube' })).toMatchObject({
       clubName: 'Clube do Livro (teste local)',
@@ -58,6 +53,42 @@ describe('readConfig', () => {
       googleBooksApiKey: null,
       appCheckSiteKey: null,
       aiModel: null,
+      live: null,
+    });
+  });
+
+  it("uses the site's keys on the emulators, with Gemini on the real project", () => {
+    const local = {
+      ...firebaseEnv,
+      VITE_FIREBASE_EMULATORS: 'true',
+      VITE_FIREBASE_PROJECT_ID: 'demo-clube',
+      VITE_GOOGLE_BOOKS_API_KEY: 'books',
+      VITE_APPCHECK_SITE_KEY: 'site-key',
+      VITE_AI_MODEL: 'gemini-3.5-flash-lite',
+    };
+    // Without the real project, no Gemini.
+    expect(readConfig(local)).toMatchObject({
+      googleBooksApiKey: 'books',
+      aiModel: null,
+      live: null,
+    });
+    const live = {
+      ...local,
+      VITE_LIVE_FIREBASE_API_KEY: 'live-key',
+      VITE_LIVE_FIREBASE_AUTH_DOMAIN: 'clube.firebaseapp.com',
+      VITE_LIVE_FIREBASE_PROJECT_ID: 'clube',
+      VITE_LIVE_FIREBASE_APP_ID: '1:2:web:3',
+      VITE_APPCHECK_DEBUG_TOKEN: 'debug',
+    };
+    expect(readConfig(live)).toMatchObject({
+      firebase: { projectId: 'demo-clube' },
+      appCheckSiteKey: null,
+      aiModel: 'gemini-3.5-flash-lite',
+      live: {
+        firebase: { projectId: 'clube', apiKey: 'live-key' },
+        appCheckSiteKey: 'site-key',
+        appCheckDebugToken: 'debug',
+      },
     });
   });
 

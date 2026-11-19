@@ -233,7 +233,7 @@ service cloud.firestore {
       allow update: if isMember()
         && (countsOwnPart(cycleId, resource.data, request.resource.data)
           || isFlowStep(cycleId, resource.data, request.resource.data)
-          || editsReadingLink(cycleId, resource.data, request.resource.data)
+          || editsReadingMaterials(cycleId, resource.data, request.resource.data)
           || (isAdmin() && isValidTransition(cycleId, resource.data, request.resource.data)));
       // A cycle can be dropped only before anyone answered: its answers and
       // titles would outlive it and lock members out of a new one.
@@ -507,18 +507,25 @@ service cloud.firestore {
         && isFinishingNow(c);
     }
 
-    // ---------------------------------------------------------- reading link
+    // ----------------------------------------------------- reading materials
     // Whoever nominated the reading (or a reading merged into it) may set or
-    // clear its link while it is read or waits its turn. Nothing else
-    // changes, and nothing says who did it.
+    // clear its link, choose whether the page shows the synopsis text or only
+    // that link, and add a link to its PDF, while it is read or waits its
+    // turn. Nothing else changes, and nothing says who did it.
 
-    function editsReadingLink(c, before, after) {
+    function isOptionalLink(value) {
+      return value == null || isLink(value);
+    }
+
+    function editsReadingMaterials(c, before, after) {
       let own = ownNomination(c);
       return before.status in ['reading', 'upcoming']
         && changesOnly(['winner'])
-        && after.winner.diff(before.winner).affectedKeys().hasOnly(['book'])
+        && after.winner.diff(before.winner).affectedKeys().hasOnly(['book', 'display', 'pdfUrl'])
         && after.winner.book.diff(before.winner.book).affectedKeys().hasOnly(['synopsisUrl'])
-        && (after.winner.book.synopsisUrl == null || isLink(after.winner.book.synopsisUrl))
+        && isOptionalLink(after.winner.book.synopsisUrl)
+        && after.winner.get('display', 'text') in ['text', 'link']
+        && isOptionalLink(after.winner.get('pdfUrl', null))
         && before.merged.get(own, own) == before.winner.nominationId;
     }
 

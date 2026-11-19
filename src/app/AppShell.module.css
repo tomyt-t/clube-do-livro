@@ -60,6 +60,19 @@
   outline: none;
 }
 
+/* The club's photos, when there are any; on phones, above the tab bar. */
+.footer {
+  inline-size: 100%;
+  max-inline-size: calc(var(--wide-width) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding: var(--space-7) var(--gutter)
+    calc(var(--tabbar-height) + env(safe-area-inset-bottom) + var(--space-4));
+}
+
+.shell:has(> .footer) .main {
+  padding-block-end: 0;
+}
+
 @media (min-width: 48rem) {
   .rule {
     justify-content: flex-start;
@@ -75,5 +88,9 @@
 
   .main {
     padding-block-end: 0;
+  }
+
+  .footer {
+    padding-block-end: var(--space-5);
   }
 }

@@ -6,7 +6,8 @@ import {
 import { doc, setDoc, updateDoc } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 
-import { setReadingLink } from '@/services/firebase/member-writes';
+import type { ReadingMaterials } from '@/domain/types';
+import { setReadingMaterials } from '@/services/firebase/member-writes';
 
 import {
   admin,
@@ -22,7 +23,8 @@ import {
   type Persona,
 } from './helpers';
 
-// The reading's nominator may set or clear its link; nothing else, nobody else.
+// The reading's nominator may set its link, how its synopsis shows and its PDF;
+// nothing else, nobody else.
 
 let env: RulesTestEnvironment;
 
@@ -45,8 +47,12 @@ beforeEach(async () => {
 });
 
 const LINK = 'https://pt.wikipedia.org/wiki/Torto_Arado';
-const linkAs = (persona: Persona, link: string | null) =>
-  setReadingLink(dbAs(env, persona), CYCLE, link);
+const PDF = 'https://drive.google.com/file/d/torto-arado/view';
+const NONE: ReadingMaterials = { link: null, display: 'text', pdfUrl: null };
+
+const materialsAs = (persona: Persona, materials: Partial<ReadingMaterials>) =>
+  setReadingMaterials(dbAs(env, persona), CYCLE, { ...NONE, ...materials });
+const linkAs = (persona: Persona, link: string | null) => materialsAs(persona, { link });
 
 describe('the link of the reading', () => {
   it('can be set and cleared by whoever nominated it', async () => {
@@ -84,5 +90,39 @@ describe('the link of the reading', () => {
   it('is closed once the reading is over', async () => {
     await withoutRules(env, (db) => updateDoc(doc(db, 'cycles', CYCLE), { status: 'finished' }));
     await assertFails(linkAs(ana, LINK));
+  });
+});
+
+describe('the materials of the reading', () => {
+  it('take how the synopsis shows and a PDF link from whoever nominated it', async () => {
+    await assertSucceeds(materialsAs(ana, { link: LINK, display: 'link', pdfUrl: PDF }));
+    await assertSucceeds(materialsAs(ana, { display: 'text', pdfUrl: null }));
+  });
+
+  it('cannot be changed by another member or the organizer', async () => {
+    await assertFails(materialsAs(bia, { pdfUrl: PDF }));
+    await assertFails(materialsAs(admin, { display: 'link' }));
+  });
+
+  it('take only the two displays and an https PDF link', async () => {
+    const db = dbAs(env, ana);
+    const cycle = doc(db, 'cycles', CYCLE);
+    await assertFails(updateDoc(cycle, { 'winner.display': 'hidden' }));
+    await assertFails(updateDoc(cycle, { 'winner.display': 1 }));
+    await assertFails(updateDoc(cycle, { 'winner.pdfUrl': 'http://example.com/livro.pdf' }));
+    await assertFails(updateDoc(cycle, { 'winner.pdfUrl': 'javascript:alert(1)' }));
+    await assertSucceeds(updateDoc(cycle, { 'winner.pdfUrl': PDF }));
+  });
+
+  it('touch nothing else of the winner or the cycle', async () => {
+    const cycle = doc(dbAs(env, ana), 'cycles', CYCLE);
+    await assertFails(updateDoc(cycle, { 'winner.pdfUrl': PDF, 'winner.notes': 'oi' }));
+    await assertFails(updateDoc(cycle, { 'winner.pdfUrl': PDF, 'winner.nominationId': N_BIA }));
+    await assertFails(updateDoc(cycle, { 'winner.pdfUrl': PDF, finishedReaders: 3 }));
+  });
+
+  it('are closed once the reading is over', async () => {
+    await withoutRules(env, (db) => updateDoc(doc(db, 'cycles', CYCLE), { status: 'finished' }));
+    await assertFails(materialsAs(ana, { pdfUrl: PDF }));
   });
 });
