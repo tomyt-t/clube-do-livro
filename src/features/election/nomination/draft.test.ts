@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import type { CoverChoice, SynopsisChoice } from '@/services/lookup';
+import type { CoverChoice, LookupResult, SynopsisChoice } from '@/services/lookup';
 
-import { checkDraft, checkPicks, composeBook, hasPickErrors, titleOf } from './draft';
+import {
+  checkDraft,
+  checkPicks,
+  composeBook,
+  coverIn,
+  hasPickErrors,
+  PASTE,
+  synopsisIn,
+  titleOf,
+} from './draft';
 
 const cover: CoverChoice = {
   url: 'https://cdn.shopify.com/capa.png?width=800',
@@ -51,23 +60,27 @@ describe('composeBook', () => {
     });
   });
 
-  it('keeps the credit of an edited text, and none for one written from scratch', () => {
-    const edited = {
-      kind: 'own',
-      text: 'Paul vai a Arrakis.',
-      sourceUrl: synopsis.sourceUrl,
-      from: synopsis,
-    } as const;
+  it('keeps the credit and page of an edited text, and none for a pasted one', () => {
+    const edited = { kind: 'own', text: 'Paul vai a Arrakis.', from: synopsis } as const;
     expect(composeBook(draft, { kind: 'none' }, edited)).toMatchObject({
       synopsis: 'Paul vai a Arrakis.',
       synopsisSource: 'publisher',
+      synopsisUrl: 'https://aleph.com.br/products/duna',
       coverUrl: null,
       coverSourceUrl: null,
     });
-    const written = { ...edited, from: null, sourceUrl: 'https://example.com/duna' };
-    expect(composeBook(draft, { kind: 'none' }, written)).toMatchObject({
+    expect(composeBook(draft, { kind: 'none' }, { ...edited, from: null })).toMatchObject({
+      synopsis: 'Paul vai a Arrakis.',
       synopsisSource: null,
-      synopsisUrl: 'https://example.com/duna',
+      synopsisUrl: null,
+    });
+  });
+
+  it('sends no synopsis when the box is left blank', () => {
+    expect(composeBook(draft, { kind: 'none' }, { ...PASTE, text: '  ' })).toMatchObject({
+      synopsis: null,
+      synopsisSource: null,
+      synopsisUrl: null,
     });
   });
 });
@@ -84,23 +97,52 @@ describe('checkPicks', () => {
       dataUrl: 'data:image/jpeg;base64,/9j/',
       sourceUrl: '',
     } as const;
-    expect(checkPicks(draft, upload, { kind: 'none' }).coverSource).toBe(
+    expect(checkPicks(draft, upload, PASTE).coverSource).toBe(
       'Cole o link da página de onde veio a imagem.',
     );
-    expect(
-      checkPicks(draft, { ...upload, sourceUrl: 'loja.com/duna' }, { kind: 'none' }).coverSource,
-    ).toBe('Use um link completo, começando com https://.');
+    expect(checkPicks(draft, { ...upload, sourceUrl: 'loja.com/duna' }, PASTE).coverSource).toBe(
+      'Use um link completo, começando com https://.',
+    );
   });
 
-  it('asks for the text and the page of a synopsis the member writes', () => {
-    const blank = { kind: 'own', text: ' ', sourceUrl: '', from: null } as const;
-    expect(checkPicks(draft, { kind: 'none' }, blank)).toEqual({
+  it('never asks where a pasted synopsis came from, only that it fits', () => {
+    expect(checkPicks(draft, { kind: 'none' }, { ...PASTE, text: 'Paul.' })).toEqual({
       coverSource: null,
-      synopsisText: 'Escreva a sinopse, ou escolha “Sem sinopse”.',
-      synopsisLink: null,
+      synopsisText: null,
     });
-    expect(checkPicks(draft, { kind: 'none' }, { ...blank, text: 'Paul.' }).synopsisLink).toBe(
-      'Cole o link da página de onde veio a sinopse.',
+    const long = { ...PASTE, text: 'x'.repeat(2001) };
+    expect(checkPicks(draft, { kind: 'none' }, long).synopsisText).toBe(
+      'Use até 2.000 caracteres.',
     );
+  });
+});
+
+describe('picks saved before the search ran again', () => {
+  const result: LookupResult = {
+    work: null,
+    covers: [{ ...cover }],
+    synopses: [{ ...synopsis }],
+    others: [],
+  };
+
+  it('are found again among the new results by their page and text', () => {
+    const [newCover] = result.covers;
+    const [newSynopsis] = result.synopses;
+    const coverAgain = coverIn(result, { kind: 'found', cover });
+    expect(coverAgain.kind === 'found' && coverAgain.cover).toBe(newCover);
+    const again = synopsisIn(result, { kind: 'found', option: synopsis });
+    expect(again.kind === 'found' && again.option).toBe(newSynopsis);
+  });
+
+  it('give way to the best found when they are gone, and keep a pasted text', () => {
+    const gone = { ...synopsis, text: 'Outro texto.' };
+    expect(synopsisIn(result, { kind: 'found', option: gone })).toEqual({
+      kind: 'found',
+      option: synopsis,
+    });
+    const pasted = { ...PASTE, text: 'Colado.' };
+    expect(synopsisIn(result, pasted)).toBe(pasted);
+    expect(synopsisIn(null, null)).toEqual(PASTE);
+    expect(coverIn(null, null)).toEqual({ kind: 'none' });
   });
 });

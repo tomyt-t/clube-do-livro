@@ -8,6 +8,8 @@ MotionGlobalConfig.skipAnimations = true;
 
 afterEach(() => {
   cleanup();
+  // A nomination in progress is kept per tab; each test starts in a new one.
+  sessionStorage.clear();
 });
 
 // jsdom implements neither of these; Motion and the router call them.

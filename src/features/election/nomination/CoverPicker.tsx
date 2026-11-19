@@ -139,11 +139,12 @@ interface CoverPickerProps {
 
 export function CoverPicker({ covers, pick, sourceError, onPick }: CoverPickerProps) {
   const name = useId();
-  const [upload, setUpload] = useState<string | null>(null);
+  // A restored pick (after a trip to another tab) brings its image back.
+  const [upload, setUpload] = useState<string | null>(pick.kind === 'upload' ? pick.dataUrl : null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const pickedUrl = pick.kind === 'found' ? pick.cover.url : null;
   // The link typed for the image survives switching away and back.
-  const [uploadSource, setUploadSource] = useState('');
+  const [uploadSource, setUploadSource] = useState(pick.kind === 'upload' ? pick.sourceUrl : '');
 
   const pickUpload = (dataUrl: string) => {
     onPick({ kind: 'upload', dataUrl, sourceUrl: uploadSource });

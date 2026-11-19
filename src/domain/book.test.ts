@@ -61,9 +61,11 @@ describe('validateBook', () => {
     expect(validateBook(bare)).toEqual([]);
   });
 
-  it('requires the page a synopsis came from', () => {
-    expect(validateBook(makeBook({ synopsisUrl: null }))).toEqual(['synopsis-link-missing']);
-    expect(validateBook(makeBook({ synopsis: null, synopsisUrl: null }))).toEqual([]);
+  it('takes a pasted synopsis without the page it came from, but only a secure link', () => {
+    expect(validateBook(makeBook({ synopsisSource: null, synopsisUrl: null }))).toEqual([]);
+    expect(validateBook(makeBook({ synopsisUrl: 'http://example.com' }))).toEqual([
+      'synopsis-link-invalid',
+    ]);
   });
 
   it('requires the page a cover came from, as a secure link', () => {

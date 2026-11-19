@@ -10,7 +10,6 @@ import {
   matchTitle,
   normalize,
 } from './match';
-import { nameWords, storyPart, withoutSales } from './story';
 import type {
   Candidate,
   CoverChoice,
@@ -221,108 +220,84 @@ const LANGUAGE_NAMES: Record<TextLanguage, string> = {
   other: 'outro idioma',
 };
 
-/** The publisher's own site first, then Google Books (publishers' texts), then the encyclopedia. */
+/** The publisher's own site first, then Google Books (publishers' texts), then the others. */
 const SOURCE_ORDER: Record<LookupSource, number> = {
-  publisher: 3,
-  'google-books': 2,
-  wikipedia: 1,
-  'open-library': 0,
-  anilist: 0,
+  publisher: 4,
+  'google-books': 3,
+  wikipedia: 2,
+  'open-library': 1,
+  anilist: 1,
 };
 
 /** Enough options to compare, without the same publisher text once per edition. */
 const MOST_PER_SOURCE: Record<LookupSource, number> = {
-  publisher: 2,
+  publisher: 3,
   'google-books': 3,
-  wikipedia: 1,
-  'open-library': 0,
-  anilist: 0,
+  wikipedia: 2,
+  'open-library': 1,
+  anilist: 1,
 };
+
+const MOST_SYNOPSES = 8;
 
 export interface SourcedSynopsis {
   synopsis: FoundSynopsis;
   source: LookupSource;
   publisher: string | null;
+  /** Which part of the page it is, when a source gives more than one ("início do enredo"). */
+  part?: string;
 }
 
-function synopsisLabel(source: LookupSource, publisher: string | null, language: TextLanguage) {
+function synopsisLabel(found: SourcedSynopsis, language: TextLanguage) {
+  const { source, publisher, part } = found;
   let where = SOURCE_NAMES[source];
-  if (source === 'wikipedia') where = 'Wikipédia · início do enredo';
-  else if (publisher && source === 'publisher') where = `Site da ${publisher}`;
+  if (publisher && source === 'publisher') where = `Site da ${publisher}`;
   else if (publisher) where = `${where} · ${publisher}`;
+  if (part) where = `${where} · ${part}`;
   return language === 'pt-BR' ? where : `${where} · ${LANGUAGE_NAMES[language]}`;
 }
 
-interface StoryOption {
-  text: string;
-  sourceUrl: string;
+interface Option {
+  choice: SynopsisChoice;
   source: LookupSource;
-  publisher: string | null;
-  language: TextLanguage;
   score: number;
 }
 
-function optionOf(found: SourcedSynopsis, pick: (text: string) => string | null) {
-  const text = pick(toPlainText(found.synopsis.raw));
+function optionOf(found: SourcedSynopsis): Option | null {
+  const text = toPlainText(found.synopsis.raw);
   if (!text) return null;
   const language = detectLanguage(text);
+  const { source } = found;
   const score =
-    LANGUAGE_WEIGHT[language] * 10 + SOURCE_ORDER[found.source] + (text.length >= 150 ? 2 : 0);
-  const { source, publisher } = found;
-  return { text, sourceUrl: found.synopsis.sourceUrl, source, publisher, language, score };
+    LANGUAGE_WEIGHT[language] * 10 + SOURCE_ORDER[source] + (text.length >= 150 ? 2 : 0);
+  const choice = {
+    text,
+    sourceUrl: found.synopsis.sourceUrl,
+    source,
+    label: synopsisLabel(found, language),
+  };
+  return { choice, source, score };
 }
-
-const isPortuguese = (option: StoryOption) =>
-  option.language === 'pt-BR' || option.language === 'pt-PT';
 
 /**
- * The options in the language the club reads: Portuguese; English only
- * when there is nothing in Portuguese; never other languages.
+ * Every synopsis found for the work, whole and in any language: Portuguese
+ * first, then by source. The same text once, a few per source.
  */
-function readable(options: readonly StoryOption[]): StoryOption[] {
-  const portuguese = options.filter(isPortuguese);
-  return portuguese.length > 0 ? portuguese : options.filter((o) => o.language === 'en');
-}
-
-/** Best first, the same text once, a few per source. */
-function shortlist(options: readonly StoryOption[]): StoryOption[] {
+export function rankSynopses(found: readonly SourcedSynopsis[]): SynopsisChoice[] {
   const seen = new Set<string>();
   const perSource = new Map<LookupSource, number>();
-  return [...options]
+  return found
+    .map(optionOf)
+    .filter((option) => option !== null)
     .sort((a, b) => b.score - a.score)
-    .filter(({ text, source }) => {
-      const key = normalize(text).slice(0, 80);
+    .filter(({ choice, source }) => {
+      const key = normalize(choice.text).slice(0, 80);
       const count = perSource.get(source) ?? 0;
       if (seen.has(key) || count >= MOST_PER_SOURCE[source]) return false;
       seen.add(key);
       perSource.set(source, count + 1);
       return true;
-    });
-}
-
-/**
- * The work's synopses to choose from, best first: only the part of each
- * text that tells the story. When no text has one, the texts themselves
- * (without sales talk) are offered instead, for the member to edit.
- */
-export function rankSynopses(
-  found: readonly SourcedSynopsis[],
-  authors: readonly string[] = [],
-): SynopsisChoice[] {
-  const author = nameWords(authors);
-  const stories = readable(
-    found
-      .map((f) => optionOf(f, (text) => storyPart(text, author)))
-      .filter((option) => option !== null),
-  );
-  const options =
-    stories.length > 0
-      ? stories
-      : readable(found.map((f) => optionOf(f, withoutSales)).filter((option) => option !== null));
-  return shortlist(options).map(({ text, sourceUrl, source, publisher, language }) => ({
-    text,
-    sourceUrl,
-    source,
-    label: synopsisLabel(source, publisher, language),
-  }));
+    })
+    .slice(0, MOST_SYNOPSES)
+    .map(({ choice }) => choice);
 }

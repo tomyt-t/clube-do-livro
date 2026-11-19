@@ -7,12 +7,11 @@ import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { Notice } from '@/ui/Notice';
 import { TextField } from '@/ui/TextField';
 
-import { checkDraft, EMPTY_DRAFT, type Draft } from './draft';
+import { checkDraft, type Draft } from './draft';
 import styles from './NominationForm.module.css';
 import { ReviewNomination } from './ReviewNomination';
+import { useSavedNomination } from './saved-nomination';
 import { useSendAnswer } from './use-send-answer';
-
-type Stage = 'choose' | 'details' | 'review';
 
 function ChooseAnswer({ onNominate, onPass }: { onNominate: () => void; onPass: () => void }) {
   return (
@@ -132,10 +131,13 @@ interface NominationFormProps {
   uid: MemberId;
 }
 
-/** Nominate a reading or pass: either answer is final, so both ask first. */
+/**
+ * Nominate a reading or pass: either answer is final, so both ask first.
+ * What the member typed and picked survives a trip to another tab.
+ */
 export function NominationForm({ cycleId, uid }: NominationFormProps) {
-  const [stage, setStage] = useState<Stage>('choose');
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const { progress, update, clear } = useSavedNomination(cycleId, uid);
+  const { stage, draft } = progress;
   const [pending, setPending] = useState<NominationAnswer | null>(null);
   const sending = useSendAnswer(cycleId, uid);
 
@@ -149,7 +151,7 @@ export function NominationForm({ cycleId, uid }: NominationFormProps) {
       {stage === 'choose' && (
         <ChooseAnswer
           onNominate={() => {
-            setStage('details');
+            update({ stage: 'details' });
           }}
           onPass={() => {
             ask({ kind: 'pass' });
@@ -159,20 +161,31 @@ export function NominationForm({ cycleId, uid }: NominationFormProps) {
       {stage === 'details' && (
         <DetailsForm
           draft={draft}
-          onChange={setDraft}
+          onChange={(next) => {
+            // Another reading: what was picked for the last one no longer fits.
+            update({ draft: next, cover: null, synopsis: null });
+          }}
           onBack={() => {
-            setStage('choose');
+            update({ stage: 'choose' });
           }}
           onNext={() => {
-            setStage('review');
+            update({ stage: 'review' });
           }}
         />
       )}
       {stage === 'review' && (
         <ReviewNomination
           draft={draft}
+          coverPick={progress.cover}
+          synopsisPick={progress.synopsis}
+          onCoverPick={(cover) => {
+            update({ cover });
+          }}
+          onSynopsisPick={(synopsis) => {
+            update({ synopsis });
+          }}
           onBack={() => {
-            setStage('details');
+            update({ stage: 'details' });
           }}
           onSend={(book) => {
             ask({ kind: 'nominate', book });
@@ -184,7 +197,10 @@ export function NominationForm({ cycleId, uid }: NominationFormProps) {
         busy={sending.busy}
         error={sending.error}
         onConfirm={() => {
-          if (pending) void sending.send(pending);
+          if (!pending) return;
+          void sending.send(pending).then((sent) => {
+            if (sent) clear();
+          });
         }}
         onCancel={() => {
           setPending(null);

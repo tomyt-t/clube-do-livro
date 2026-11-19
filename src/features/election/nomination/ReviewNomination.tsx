@@ -10,10 +10,10 @@ import { CoverPicker } from './CoverPicker';
 import {
   checkPicks,
   composeBook,
-  firstCover,
-  firstSynopsis,
+  coverIn,
   hasPickErrors,
   NO_PICK_ERRORS,
+  synopsisIn,
   titleOf,
   type CoverPick,
   type Draft,
@@ -64,6 +64,12 @@ function FoundWork({ result }: { result: LookupResult | null }) {
 
 interface ReviewNominationProps {
   draft: Draft;
+  /** What the member picked, null until they do (the best found is used). */
+  coverPick: CoverPick | null;
+  synopsisPick: SynopsisPick | null;
+  onCoverPick: (pick: CoverPick) => void;
+  onSynopsisPick: (pick: SynopsisPick) => void;
+  /** Back to the title and author, to change the reading. */
   onBack: () => void;
   onSend: (book: Book) => void;
 }
@@ -73,14 +79,13 @@ interface ReviewNominationProps {
  * it, which the member confirms, switches or replaces (always naming where
  * a replacement came from).
  */
-export function ReviewNomination({ draft, onBack, onSend }: ReviewNominationProps) {
+export function ReviewNomination(props: ReviewNominationProps) {
+  const { draft, onBack, onSend } = props;
   const lookup = useBookLookup(titleOf(draft));
   const result = lookup.status === 'done' ? lookup.result : null;
-  const [coverPick, setCoverPick] = useState<CoverPick | null>(null);
-  const [synopsisPick, setSynopsisPick] = useState<SynopsisPick | null>(null);
   const [tried, setTried] = useState(false);
-  const cover = coverPick ?? firstCover(result);
-  const synopsis = synopsisPick ?? firstSynopsis(result);
+  const cover = coverIn(result, props.coverPick);
+  const synopsis = synopsisIn(result, props.synopsisPick);
   const book = composeBook(draft, cover, synopsis);
   const errors = tried ? checkPicks(draft, cover, synopsis) : NO_PICK_ERRORS;
 
@@ -94,20 +99,23 @@ export function ReviewNomination({ draft, onBack, onSend }: ReviewNominationProp
         if (!hasPickErrors(checkPicks(draft, cover, synopsis))) onSend(book);
       }}
     >
+      <Button variant="quiet" className={styles.change} onClick={onBack}>
+        Voltar e trocar o livro
+      </Button>
       <BookPreview book={book} />
       <FoundWork result={result} />
       <CoverPicker
         covers={result?.covers ?? null}
         pick={cover}
         sourceError={errors.coverSource}
-        onPick={setCoverPick}
+        onPick={props.onCoverPick}
       />
       <SynopsisPicker
         options={result?.synopses ?? null}
         pick={synopsis}
-        errors={errors}
+        error={errors.synopsisText}
         title={titleOf(draft)}
-        onPick={setSynopsisPick}
+        onPick={props.onSynopsisPick}
       />
       <div className={styles.actions}>
         <Button type="submit" disabled={result === null}>

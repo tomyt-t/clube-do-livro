@@ -16,6 +16,11 @@
   font-size: var(--text-sm);
 }
 
+/* Back to the title, at the top of the review: the way to change the reading. */
+.change {
+  justify-self: start;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

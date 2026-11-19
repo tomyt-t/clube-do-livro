@@ -120,6 +120,7 @@ const globoLivros: Catalog = {
     }),
 };
 
+/** Each host must also be in `connect-src` (vite-plugins/csp.ts), or the published site blocks it. */
 export const CATALOGS: readonly Catalog[] = [
   wordPress('Rocco', 'https://rocco.com.br/wp-json/wp/v2', 'product'),
   wordPress('Intrínseca', 'https://intrinseca.com.br/wp-json/wp/v2', 'livro'),

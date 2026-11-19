@@ -26,14 +26,25 @@ const POLICY: Record<string, string[]> = {
     'https://archive.org',
     'https://*.archive.org',
     'https://s4.anilist.co',
+    'https://upload.wikimedia.org',
+    'https://cdn.shopify.com',
+    'https://globolivros.globo.com',
   ],
   'connect-src': [
     "'self'",
     'https://*.googleapis.com',
     'https://openlibrary.org',
     'https://graphql.anilist.co',
-    // Article summaries, read only from Wikipedia links members paste.
     'https://*.wikipedia.org',
+    // The publishers' catalogs in src/services/lookup/publishers.ts.
+    'https://rocco.com.br',
+    'https://intrinseca.com.br',
+    'https://www.antofagica.com.br',
+    'https://www.record.com.br',
+    'https://harpercollins.com.br',
+    'https://aleph.com.br',
+    'https://sextante.com.br',
+    'https://globolivros.globo.com',
   ],
   'frame-src': [
     'https://*.firebaseapp.com',

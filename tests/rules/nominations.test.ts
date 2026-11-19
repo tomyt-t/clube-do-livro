@@ -294,6 +294,12 @@ describe('book validation', () => {
     );
   });
 
+  it('accepts a pasted synopsis, with no source or page', async () => {
+    await assertSucceeds(
+      rawNominate(dbAs(env, ana), ana.uid, { ...valid, synopsisSource: null, synopsisUrl: null }),
+    );
+  });
+
   it('accepts a reading with no cover, and so no cover source', async () => {
     await assertSucceeds(
       rawNominate(dbAs(env, ana), ana.uid, { ...valid, coverUrl: null, coverSourceUrl: null }),
@@ -308,7 +314,6 @@ describe('book validation', () => {
     ['an unknown synopsis source', { synopsisSource: 'blog' }],
     ['a source without a synopsis', { synopsis: null, synopsisSource: 'anilist' }],
     ['a non-https synopsis link', { synopsisUrl: 'http://example.com/sinopse' }],
-    ['a synopsis without the page it came from', { synopsisUrl: null }],
     ['a cover without the page it came from', { coverSourceUrl: null }],
     ['a non-https cover source', { coverSourceUrl: 'http://example.com/capa' }],
     ['a cover source without a cover', { coverUrl: null }],

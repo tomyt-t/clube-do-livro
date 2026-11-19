@@ -12,7 +12,7 @@ import { createFirebaseFlow } from './flow';
 type FirebaseAppConfig = Extract<AppConfig, { mode: 'firebase' }>;
 
 export function createFirebaseBackend(config: FirebaseAppConfig): Backend {
-  const services = initFirebase(config.firebase, config.appCheckSiteKey);
+  const services = initFirebase(config.firebase, config.appCheckSiteKey, config.emulators);
   return {
     kind: 'firebase',
     auth: createFirebaseAuth(services),

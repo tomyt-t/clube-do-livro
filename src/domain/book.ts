@@ -21,7 +21,6 @@ export type BookError =
   | 'title-too-long'
   | 'synopsis-too-long'
   | 'synopsis-source-invalid'
-  | 'synopsis-link-missing'
   | 'synopsis-link-invalid'
   | 'cover-invalid'
   | 'cover-source-missing'
@@ -96,13 +95,12 @@ function coverSourceErrors({ coverUrl, coverSourceUrl }: Book): BookError[] {
   return coverUrl !== null && coverSourceUrl === null ? ['cover-source-missing'] : [];
 }
 
-function synopsisErrors({ synopsis, synopsisSource, synopsisUrl }: Book): BookError[] {
+/** A synopsis found by the search keeps its page; a pasted one may have none. */
+function synopsisErrors({ synopsis, synopsisSource }: Book): BookError[] {
   const errors: BookError[] = [];
   if (synopsis !== null && synopsis.length > BOOK_LIMITS.synopsis) {
     errors.push('synopsis-too-long');
   }
-  // A synopsis always says where it came from, typed or found.
-  if (synopsis !== null && synopsisUrl === null) errors.push('synopsis-link-missing');
   const knownSource = synopsisSource === null || SYNOPSIS_SOURCES.includes(synopsisSource);
   if (!knownSource || (synopsisSource !== null && synopsis === null)) {
     errors.push('synopsis-source-invalid');

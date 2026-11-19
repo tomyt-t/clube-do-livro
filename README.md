@@ -13,8 +13,9 @@ colocar no ar está em [`docs/CONFIGURACAO.md`](docs/CONFIGURACAO.md).
 - **Indicação.** Cada membro indica uma leitura (livro, mangá, quadrinho, o que for) ou passa a
   vez (até 16 leituras por rodada). Pelo título e autor, o site busca capas e sinopses nos sites
   das editoras, no Google Livros, no Open Library, no AniList e na Wikipédia, sem nenhum servidor
-  próprio. Das sinopses fica só o trecho que conta a história, e quem indica alterna entre as
-  fontes, edita ou cola outra. Toda capa e toda sinopse guardam o link de onde vieram. As
+  próprio. Quem indica alterna entre as sinopses encontradas, inteiras e em qualquer idioma
+  (português primeiro), ou cola a da contracapa. Toda capa e toda sinopse encontrada guardam o
+  link de onde vieram; a indicação não se perde ao trocar de aba. As
   indicações ficam escondidas até todos responderem e quem indicou nunca aparece.
   Ninguém é barrado por indicar o mesmo livro que outra pessoa: a conferência resolve depois.
 - **Conferência.** Quando todos respondem, a lista se abre para todos e o site procura o mesmo
@@ -81,6 +82,7 @@ Requer Node 24 (veja `.nvmrc`).
 ```sh
 npm install
 npm run dev:demo     # clube de exemplo em memória, sem Firebase
+npm run dev:emulator # o site de verdade nos emuladores locais, sem o projeto real (requer Java 21)
 npm run dev          # com o seu Firebase (.env.local; veja docs/CONFIGURACAO.md)
 npm run check        # tipos, lint, formatação e testes
 npm run test:rules   # regras do Firestore no emulador (requer Java 21)
@@ -90,6 +92,14 @@ npm run illustrations  # regenera as ilustrações em src/assets/illustrations
 
 No demo, a barra do topo troca de membro e de etapa (Indicações, Votação, Lendo), para
 experimentar cada tela.
+
+`dev:emulator` roda o código do site publicado contra os emuladores do Firebase: login, banco
+e as mesmas `firestore.rules`, sem tocar no projeto real nem gastar cota. Ele não usa App
+Check, Gemini nem a chave do Google Books (sem ela, o Google Livros fica fora da busca). A lista começa com `organizador@exemplo.com`
+(organizador), `ana@`, `bia@` e `caio@exemplo.com`. Para entrar, use "Entrar com Google" e,
+no popup do emulador, "Add new account" com um desses emails. Os dados ficam em
+`.emulator-data/` ao sair com Ctrl+C; apague a pasta para recomeçar. O painel dos emuladores
+fica em http://127.0.0.1:4000.
 
 ## Como o código está organizado
 

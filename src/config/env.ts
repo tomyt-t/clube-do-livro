@@ -23,6 +23,8 @@ export type AppConfig =
        * otherwise anyone could spend the quota with the public config.
        */
       aiModel: string | null;
+      /** Local Auth and Firestore emulators (`npm run dev:emulator`) instead of the real project. */
+      emulators: boolean;
     });
 
 export class ConfigError extends Error {
@@ -38,6 +40,7 @@ export class ConfigError extends Error {
 type EnvKey =
   | 'VITE_CLUB_NAME'
   | 'VITE_DEMO_MODE'
+  | 'VITE_FIREBASE_EMULATORS'
   | 'VITE_FIREBASE_API_KEY'
   | 'VITE_FIREBASE_AUTH_DOMAIN'
   | 'VITE_FIREBASE_PROJECT_ID'
@@ -73,6 +76,27 @@ function readFirebase(env: EnvSource): FirebaseConfig {
   return Object.fromEntries(entries) as unknown as FirebaseConfig;
 }
 
+/**
+ * The local emulators (`.env.emulator`): only a `demo-` project, which the
+ * emulators never connect to a real one, and nothing that spends a quota
+ * (no App Check, no Gemini, no Google Books key), even if `.env.local` has them.
+ */
+function emulatorConfig(env: EnvSource, clubName: string): AppConfig {
+  const firebase = readFirebase(env);
+  if (!firebase.projectId.startsWith('demo-')) {
+    throw new Error('Os emuladores só rodam com um projeto "demo-", nunca com o real.');
+  }
+  return {
+    mode: 'firebase',
+    clubName: `${clubName} (teste local)`,
+    googleBooksApiKey: null,
+    firebase,
+    appCheckSiteKey: null,
+    aiModel: null,
+    emulators: true,
+  };
+}
+
 /** Reads and validates the build-time configuration (see `.env.example`). */
 export function readConfig(env: EnvSource = import.meta.env): AppConfig {
   const shared: SharedConfig = {
@@ -80,6 +104,7 @@ export function readConfig(env: EnvSource = import.meta.env): AppConfig {
     googleBooksApiKey: optional(env.VITE_GOOGLE_BOOKS_API_KEY),
   };
   if (env.VITE_DEMO_MODE === 'true') return { ...shared, mode: 'demo' };
+  if (env.VITE_FIREBASE_EMULATORS === 'true') return emulatorConfig(env, shared.clubName);
   const appCheckSiteKey = optional(env.VITE_APPCHECK_SITE_KEY);
 
   return {
@@ -88,5 +113,6 @@ export function readConfig(env: EnvSource = import.meta.env): AppConfig {
     firebase: readFirebase(env),
     appCheckSiteKey,
     aiModel: appCheckSiteKey ? optional(env.VITE_AI_MODEL) : null,
+    emulators: false,
   };
 }

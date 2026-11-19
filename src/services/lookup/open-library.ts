@@ -1,12 +1,12 @@
 import { fetchJson, isRecord, listAt, textAt } from './http';
 
-import type { Candidate, Query, SourceRequest } from './types';
+import type { Candidate, FoundSynopsis, Query, SourceRequest } from './types';
 
 /**
  * Open Library: no key, good coverage of classics. Asked for a Portuguese
  * edition of each work (`lang=pt`), whose cover is preferred over the
- * work's (often an English one). Its descriptions are written by
- * volunteers, so they are never used as the synopsis.
+ * work's (often an English one). The work's description, written by
+ * volunteers, is fetched only for the reading chosen.
  */
 
 const FIELDS = [
@@ -77,6 +77,7 @@ function toCandidate(doc: unknown): Candidate | null {
     kind: 'book',
     cover,
     synopsis: null,
+    work: { json: `https://openlibrary.org${key}.json`, url: `https://openlibrary.org${key}` },
   };
 }
 
@@ -88,4 +89,15 @@ export function readOpenLibrary(json: unknown): Candidate[] {
 
 export async function searchOpenLibrary(query: Query, request: SourceRequest) {
   return readOpenLibrary(await fetchJson(openLibraryUrl(query), request));
+}
+
+/** The work's description, a plain string or `{ value }`, asked only for the reading chosen. */
+export async function workDescription(
+  work: { json: string; url: string },
+  request: SourceRequest,
+): Promise<FoundSynopsis | null> {
+  const json = await fetchJson(work.json, request);
+  const description = isRecord(json) ? json.description : null;
+  const raw = typeof description === 'string' ? description : textAt(description, 'value');
+  return raw ? { raw, sourceUrl: work.url } : null;
 }

@@ -138,12 +138,11 @@ service cloud.firestore {
     }
 
     // Any kind of reading, described in free text: only sizes and link
-    // formats are checked. A synopsis always comes with the page it came
-    // from, and a cover with its own.
+    // formats are checked. A cover always comes with the page it came from;
+    // a synopsis found by the search keeps its page, a pasted one has none.
     function isSynopsis(book) {
       return (book.synopsis == null && book.synopsisSource == null)
         || (isText(book.synopsis, 1, 2000)
-          && isLink(book.synopsisUrl)
           && (book.synopsisSource == null
             || book.synopsisSource
               in ['publisher', 'google-books', 'wikipedia', 'open-library', 'anilist']));

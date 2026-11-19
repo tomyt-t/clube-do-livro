@@ -37,21 +37,3 @@ export function detectLanguage(text: string): TextLanguage {
   if (en === rivals && en > 0.08) return 'en';
   return 'other';
 }
-
-/** Phrases that give the ending away. */
-const SPOILERS = [
-  /\bno final\b/,
-  /\bao final do livro\b/,
-  /\bno desfecho\b/,
-  /\bacaba (por )?morre/,
-  /\be revelado que\b/,
-  /\bdescobre se que\b/,
-  /\bin the end\b/,
-  /\beventually dies\b/,
-  /\bat the end of the (book|novel)\b/,
-];
-
-export function spoilerCount(text: string): number {
-  const plain = normalize(text);
-  return SPOILERS.filter((cue) => cue.test(plain)).length;
-}

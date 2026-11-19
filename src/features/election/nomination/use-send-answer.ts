@@ -14,13 +14,16 @@ export function useSendAnswer(cycleId: CycleId, uid: MemberId) {
   const { club } = useBackend();
   const [state, setState] = useState<Sending>({ busy: false, error: null });
 
-  const send = async (answer: NominationAnswer) => {
+  /** True once the answer is recorded. */
+  const send = async (answer: NominationAnswer): Promise<boolean> => {
     setState({ busy: true, error: null });
     try {
       await club.answerNominationCall({ cycleId, uid, answer });
       setState({ busy: false, error: null });
+      return true;
     } catch (error) {
       setState({ busy: false, error: describeError(error) });
+      return false;
     }
   };
 

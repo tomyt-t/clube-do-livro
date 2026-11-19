@@ -10,7 +10,7 @@ export interface FoundCover {
   sourceUrl: string;
 }
 
-/** The publisher's own synopsis, never one written by readers or volunteers. */
+/** A synopsis as a source gives it, with the page it came from. */
 export interface FoundSynopsis {
   /** As the source sent it (HTML allowed); cleaned before it is shown. */
   raw: string;
@@ -30,10 +30,11 @@ export interface Candidate {
   isbn: string | null;
   kind: ReadingKind;
   cover: FoundCover | null;
-  /** Only from publishers: their own site, or Google Books, which carries their texts. */
   synopsis: FoundSynopsis | null;
   /** A Wikipedia article, whose plot section opening is offered too (fetched for the chosen work). */
   article?: { title: string; url: string };
+  /** An Open Library work, whose description is fetched for the chosen work. */
+  work?: { json: string; url: string };
 }
 
 export type Fetcher = typeof fetch;

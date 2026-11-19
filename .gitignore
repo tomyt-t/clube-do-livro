@@ -5,17 +5,21 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Environment: only the shared defaults (.env), the demo switch and the
-# example are tracked. Real values live in .env.local or GitHub variables.
+# Environment: only the shared defaults (.env), the demo and emulator
+# switches and the example are tracked. Real values live in .env.local or
+# GitHub variables.
 .env.*
 !.env.example
 !.env.demo
+!.env.emulator
 
 # Firebase emulator
 .firebase/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+auth-debug.log
+.emulator-data/
 
 # Test output
 coverage/

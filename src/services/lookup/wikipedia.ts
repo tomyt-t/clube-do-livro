@@ -6,9 +6,9 @@ import type { Candidate, FoundSynopsis, Query, SourceRequest } from './types';
 /**
  * Portuguese Wikipedia: strong on Brazilian classics and prize winners.
  * The search recognizes the reading (the lead's first paragraph names its
- * author). For the reading chosen, the opening of the article's plot
- * section is offered as one more synopsis: only its first paragraph, which
- * sets the story up, never the paragraphs that tell how it ends.
+ * author), and the lead is offered as a synopsis. For the reading chosen,
+ * the opening of the article's plot section is offered too: only its first
+ * paragraph, which sets the story up, not the ones that tell how it ends.
  */
 
 export function wikipediaSearchUrl(query: Query): string {
@@ -71,7 +71,7 @@ function toCandidate(page: unknown): Candidate | null {
     isbn: null,
     kind: KINDS.test(title) ? 'manga' : 'book',
     cover: imageOf(page, url),
-    synopsis: null,
+    synopsis: { raw: extract, sourceUrl: url },
     article: { title, url },
   };
 }

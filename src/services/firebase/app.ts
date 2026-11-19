@@ -3,11 +3,12 @@ import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-ch
 import {
   browserLocalPersistence,
   browserPopupRedirectResolver,
+  connectAuthEmulator,
   indexedDBLocalPersistence,
   initializeAuth,
   type Auth,
 } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { connectFirestoreEmulator, getFirestore, type Firestore } from 'firebase/firestore';
 
 import type { FirebaseConfig } from '@/config/env';
 
@@ -17,9 +18,15 @@ export interface FirebaseServices {
   db: Firestore;
 }
 
+/** Where `npm run dev:emulator` serves them (ports in firebase.json). */
+const EMULATOR_HOST = '127.0.0.1';
+const AUTH_EMULATOR = `http://${EMULATOR_HOST}:9099`;
+const FIRESTORE_EMULATOR_PORT = 8080;
+
 export function initFirebase(
   config: FirebaseConfig,
   appCheckSiteKey: string | null,
+  emulators = false,
 ): FirebaseServices {
   const app = initializeApp(config);
 
@@ -38,6 +45,12 @@ export function initFirebase(
     popupRedirectResolver: browserPopupRedirectResolver,
   });
   auth.languageCode = 'pt-BR';
+  const db = getFirestore(app);
 
-  return { app, auth, db: getFirestore(app) };
+  if (emulators) {
+    connectAuthEmulator(auth, AUTH_EMULATOR, { disableWarnings: true });
+    connectFirestoreEmulator(db, EMULATOR_HOST, FIRESTORE_EMULATOR_PORT);
+  }
+
+  return { app, auth, db };
 }

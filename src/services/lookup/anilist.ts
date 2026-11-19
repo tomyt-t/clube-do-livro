@@ -2,7 +2,7 @@ import { fetchJson, isRecord, listAt, textAt } from './http';
 
 import type { Candidate, Query, SourceRequest } from './types';
 
-/** Manga, manhwa and light novels: AniList's public GraphQL API, no key. Used to find the reading and its cover. */
+/** Manga, manhwa and light novels: AniList's public GraphQL API, no key. */
 
 export const ANILIST_URL = 'https://graphql.anilist.co';
 
@@ -15,6 +15,7 @@ query ($search: String) {
       siteUrl
       title { romaji english native }
       synonyms
+      description(asHtml: true)
       coverImage { extraLarge large }
       startDate { year }
       staff(perPage: 3, sort: RELEVANCE) { edges { role node { name { full } } } }
@@ -45,6 +46,11 @@ function extrasOf(media: Record<string, unknown>, sourceUrl: string) {
   };
 }
 
+function synopsisOf(media: Record<string, unknown>, sourceUrl: string) {
+  const raw = textAt(media, 'description');
+  return raw ? { raw, sourceUrl } : null;
+}
+
 function toCandidate(media: unknown): Candidate | null {
   if (!isRecord(media) || typeof media.id !== 'number') return null;
   const page = textAt(media, 'siteUrl');
@@ -62,8 +68,7 @@ function toCandidate(media: unknown): Candidate | null {
     // One-shots and novels are rarely what a club means by the series' name.
     kind: media.format === 'MANGA' ? 'manga' : 'other',
     ...extrasOf(media, page),
-    // Its descriptions are written by volunteers, never shown as the synopsis.
-    synopsis: null,
+    synopsis: synopsisOf(media, page),
   };
 }
 

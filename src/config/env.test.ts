@@ -17,6 +17,7 @@ describe('readConfig', () => {
       googleBooksApiKey: null,
       appCheckSiteKey: null,
       aiModel: null,
+      emulators: false,
       firebase: {
         apiKey: 'key',
         authDomain: 'clube.firebaseapp.com',
@@ -39,6 +40,24 @@ describe('readConfig', () => {
       mode: 'demo',
       clubName: 'Clube do Livro',
       googleBooksApiKey: null,
+    });
+  });
+
+  it('points at the local emulators only with a demo project, spending no quota', () => {
+    const local = {
+      ...firebaseEnv,
+      VITE_FIREBASE_EMULATORS: 'true',
+      VITE_GOOGLE_BOOKS_API_KEY: 'books',
+      VITE_APPCHECK_SITE_KEY: 'site-key',
+      VITE_AI_MODEL: 'gemini-3.5-flash-lite',
+    };
+    expect(() => readConfig(local)).toThrow(/demo-/);
+    expect(readConfig({ ...local, VITE_FIREBASE_PROJECT_ID: 'demo-clube' })).toMatchObject({
+      clubName: 'Clube do Livro (teste local)',
+      emulators: true,
+      googleBooksApiKey: null,
+      appCheckSiteKey: null,
+      aiModel: null,
     });
   });
 
