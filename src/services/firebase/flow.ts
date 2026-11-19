@@ -4,7 +4,7 @@ import type { FirebaseServices } from './app';
 import { guard } from './errors';
 import {
   closeVoting,
-  declareWinner,
+  declareStoredWinner,
   finishAndOpenNext,
   readResults,
   recordReview,
@@ -19,7 +19,7 @@ export function createFirebaseFlow({ db }: FirebaseServices): FlowPort {
     startVoting: (input) => guard(startVoting(db, input)),
     closeVoting: (cycleId) => guard(closeVoting(db, cycleId)),
     readResults: (cycleId) => guard(readResults(db, cycleId)),
-    declareWinner: (input) => guard(declareWinner(db, input)),
+    declareWinner: (input) => guard(declareStoredWinner(db, input)),
     finishAndOpenNext: (input) => guard(finishAndOpenNext(db, input)),
   };
 }

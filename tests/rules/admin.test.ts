@@ -24,8 +24,10 @@ import {
   openCycle,
   startReading,
 } from '@/services/firebase/admin-writes';
+import { toBook } from '@/services/firebase/converters';
 import {
   closeVoting,
+  declareStoredWinner,
   declareWinner,
   readResults,
   startVoting,
@@ -244,6 +246,31 @@ describe('declaring a clear winner', () => {
 
   it('accepts the book with the most votes', async () => {
     await assertSucceeds(declare({ nominationId: N_ANA, method: 'votes', results }));
+  });
+
+  it('copies an older book as stored, though the app reads it with a key it lacks', async () => {
+    // Saved before covers named their source: no coverSourceUrl at all.
+    const older = Object.fromEntries(
+      Object.entries(bookFor(N_ANA)).filter(([key]) => key !== 'coverSourceUrl'),
+    );
+    await withoutRules(env, async (db) => {
+      await updateDoc(doc(db, 'cycles', CYCLE, 'nominations', N_ANA), { book: older });
+    });
+    const read = toBook(older);
+    if (!read) throw new Error('The older book should still read.');
+    expect(read.coverSourceUrl).toBeNull();
+    const input = {
+      cycleId: CYCLE,
+      nominationId: N_ANA,
+      book: read,
+      method: 'votes',
+      drawnFrom: [],
+      results,
+      startReading: true,
+    } as const;
+
+    await assertFails(declareWinner(dbAs(env, admin), input));
+    await assertSucceeds(declareStoredWinner(dbAs(env, admin), input));
   });
 
   it('rejects a book that did not lead', async () => {

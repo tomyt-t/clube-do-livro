@@ -107,6 +107,17 @@ export async function declareWinner(db: Firestore, input: DeclareWinnerInput) {
   });
 }
 
+/**
+ * The rules hold the winner's book to the nomination's exactly as stored.
+ * Read through the converter, an older nomination gains a key it was saved
+ * without (`coverSourceUrl`), so the book is copied from the stored document.
+ */
+export async function declareStoredWinner(db: Firestore, input: DeclareWinnerInput) {
+  const nomination = await getDoc(refs.nomination(db, input.cycleId, input.nominationId));
+  const stored = nomination.get('book') as Book | undefined;
+  await declareWinner(db, { ...input, book: stored ?? input.book });
+}
+
 /** Ends the book and opens the next round in one batch, so it happens once. */
 export async function finishAndOpenNext(
   db: Firestore,
