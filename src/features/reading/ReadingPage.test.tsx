@@ -161,7 +161,7 @@ describe('Acabei de ler!', () => {
 describe('ReadingPage, the link of the reading', () => {
   async function readingBy(uid: string) {
     const backend = emptyClub();
-    await soloRound(backend, makeBook({ title: 'Torto Arado', synopsisUrl: null }));
+    await soloRound(backend, makeBook({ title: 'Torto Arado', synopsis: null, synopsisUrl: null }));
     return { ...renderAsMember(<ReadingPage />, uid, { backend }), backend };
   }
 

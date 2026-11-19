@@ -110,6 +110,8 @@ export function Ballot({ cycle, options, own, merged, uid }: BallotProps) {
   const required = requiredChoices(cycle.options, own, merged);
   const { ballot, pick, dislike, swap } = useBallotDraft(required);
   const [view, setView] = useBallotView();
+  // The card the deck opens on: the one whose synopsis was tapped in the list.
+  const [startAt, setStartAt] = useState<NominationId | null>(null);
   const [confirming, setConfirming] = useState(false);
   const casting = useCastBallot(cycle.id, uid);
   const wide = useMediaQuery(WIDE);
@@ -136,9 +138,22 @@ export function Ballot({ cycle, options, own, merged, uid }: BallotProps) {
   );
   const choices =
     view === 'list' ? (
-      <BallotList {...choose} />
+      <BallotList
+        {...choose}
+        onRead={(id) => {
+          setStartAt(id);
+          setView('cards');
+          window.scrollTo({ top: 0 });
+        }}
+      />
     ) : (
-      <BallotDeck {...choose} wide={wide} keyboard={!confirming} onDislike={dislike} />
+      <BallotDeck
+        {...choose}
+        startAt={startAt}
+        wide={wide}
+        keyboard={!confirming}
+        onDislike={dislike}
+      />
     );
 
   // Desktop: the header and the choices so far go to the page's sidebar.

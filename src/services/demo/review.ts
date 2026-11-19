@@ -1,7 +1,6 @@
 import {
   ballotOptions,
   conflictIds,
-  MAX_AUTO_MERGES,
   MAX_CONFLICT_GROUPS,
   MAX_GROUP_SIZE,
   MAX_MERGED,
@@ -39,25 +38,6 @@ export function isValidGroups(cycle: Cycle, groups: readonly ConflictGroup[]): b
     ) &&
     new Set(ids).size === flagged &&
     ids.every((id) => cycle.nominationIds.includes(id) && !(id in cycle.merged))
-  );
-}
-
-/**
- * Mirrors `autoMerges`: the check only adds merges, each later nomination
- * into an earlier one, never a flagged one, and only a few at a time.
- */
-function isAutoMerge(cycle: Cycle, merged: Merged, groups: readonly ConflictGroup[]): boolean {
-  const before = Object.entries(cycle.merged);
-  const kept = before.every(([from, to]) => merged[from] === to);
-  const added = Object.entries(merged).filter(([from]) => !(from in cycle.merged));
-  const order = (id: NominationId) => cycle.nominationIds.indexOf(id);
-  const flagged = conflictIds(groups);
-  return (
-    kept &&
-    isValidMerge(cycle, merged) &&
-    added.length <= MAX_AUTO_MERGES &&
-    added.every(([from, to]) => order(to) >= 0 && order(to) < order(from)) &&
-    !Object.keys(merged).some((id) => flagged.includes(id))
   );
 }
 
@@ -171,18 +151,16 @@ export function reviewSteps(context: DemoContext, members: () => number): Review
       });
     },
 
-    recordReview: async (cycleId, groups, merged) => {
+    recordReview: async (cycleId, groups) => {
       await pause(context);
       requireMember(context);
       const cycle = reviewingCycle(store.current, cycleId);
       if (cycle.review?.conflicts !== null || !isValidGroups(cycle, groups)) deny();
-      if (!isAutoMerge(cycle, merged, groups)) deny();
       const flagged = flaggedAfter(cycle, groups) ?? deny();
       store.update((state) => {
         const target = reviewingCycle(state, cycleId);
         target.review = { conflicts: structuredClone([...groups]) };
         target.flagged = flagged;
-        target.merged = { ...merged };
       });
     },
   };

@@ -1,19 +1,14 @@
 import { useId, useState, type ReactNode } from 'react';
 
-import type { CoverOption } from '@/services/covers';
+import type { CoverChoice } from '@/services/lookup';
 import { cx } from '@/ui/cx';
+import { withHost } from '@/ui/link-host';
 import { Spinner } from '@/ui/Spinner';
+import { TextField } from '@/ui/TextField';
 
 import styles from './CoverPicker.module.css';
-import type { CoverChoice } from './draft';
+import type { CoverPick } from './draft';
 import { resizeCover } from './resize-cover';
-import type { CoverSearch } from './use-lookups';
-
-const SOURCE_NAMES: Record<CoverOption['source'], string> = {
-  'open-library': 'Open Library',
-  'google-books': 'Google Livros',
-  anilist: 'AniList',
-};
 
 interface TileProps {
   name: string;
@@ -40,31 +35,17 @@ function Tile({ name, checked, onPick, label, children }: TileProps) {
   );
 }
 
-function SearchStatus({ covers }: { covers: CoverSearch }) {
-  if (covers.status === 'loading') {
+function SearchStatus({ covers }: { covers: readonly CoverChoice[] | null }) {
+  if (covers === null) {
     return (
       <p className={styles.status} role="status">
         <Spinner /> Buscando capas…
       </p>
     );
   }
-  const message = searchMessage(covers);
-  return message && <p className={styles.status}>{message}</p>;
-}
-
-function searchMessage(covers: Exclude<CoverSearch, { status: 'loading' }>): string | null {
-  if (covers.status === 'error') {
-    return 'Não foi possível buscar capas agora. Envie uma imagem ou siga sem capa.';
-  }
-  if (covers.options.length > 0) return null;
-  return 'Nenhuma capa encontrada. Envie uma imagem ou siga sem capa.';
-}
-
-function describeChoice(choice: CoverChoice): string {
-  if (choice.kind === 'none') return 'Sem capa: o título aparece no lugar.';
-  if (choice.kind === 'upload') return 'Sua imagem.';
-  const { title, details, source } = choice.option;
-  return [title, details, SOURCE_NAMES[source]].filter(Boolean).join(', ') + '.';
+  return covers.length === 0 ? (
+    <p className={styles.status}>Nenhuma capa encontrada. Envie uma imagem ou siga sem capa.</p>
+  ) : null;
 }
 
 interface UploadTileProps {
@@ -106,43 +87,92 @@ function UploadTile({ onUpload, onError }: UploadTileProps) {
   );
 }
 
-interface CoverPickerProps {
-  covers: CoverSearch;
-  choice: CoverChoice;
-  onPick: (choice: CoverChoice) => void;
+/** Where the chosen cover comes from: the catalog's page, or a link the member gives. */
+function CoverSource({
+  pick,
+  error,
+  onPick,
+}: {
+  pick: CoverPick;
+  error: string | null;
+  onPick: (pick: CoverPick) => void;
+}) {
+  if (pick.kind === 'none') {
+    return <p className={styles.caption}>Sem capa: o título aparece no lugar.</p>;
+  }
+  if (pick.kind === 'found') {
+    return (
+      <p className={styles.caption}>
+        {pick.cover.label}.{' '}
+        <a href={pick.cover.sourceUrl} target="_blank" rel="noopener noreferrer">
+          {withHost('Ver a fonte', pick.cover.sourceUrl)}
+          <span className="visually-hidden"> (abre em outra aba)</span>
+        </a>
+      </p>
+    );
+  }
+  return (
+    <TextField
+      label="Link da página de onde veio a imagem"
+      type="url"
+      inputMode="url"
+      value={pick.sourceUrl}
+      autoComplete="off"
+      placeholder="https://"
+      hint="A página da editora, de uma livraria ou de onde você tirou a capa."
+      error={error}
+      onChange={(event) => {
+        onPick({ ...pick, sourceUrl: event.target.value });
+      }}
+    />
+  );
 }
 
-export function CoverPicker({ covers, choice, onPick }: CoverPickerProps) {
+interface CoverPickerProps {
+  /** Null while the search runs. */
+  covers: readonly CoverChoice[] | null;
+  pick: CoverPick;
+  /** Shown once the member tries to send. */
+  sourceError: string | null;
+  onPick: (pick: CoverPick) => void;
+}
+
+export function CoverPicker({ covers, pick, sourceError, onPick }: CoverPickerProps) {
   const name = useId();
   const [upload, setUpload] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const options = covers.status === 'ready' ? covers.options : [];
-  const pickedId = choice.kind === 'catalog' ? choice.option.id : null;
+  const pickedUrl = pick.kind === 'found' ? pick.cover.url : null;
+  // The link typed for the image survives switching away and back.
+  const [uploadSource, setUploadSource] = useState('');
+
+  const pickUpload = (dataUrl: string) => {
+    onPick({ kind: 'upload', dataUrl, sourceUrl: uploadSource });
+  };
 
   return (
     <fieldset className={styles.picker}>
       <legend className={styles.legend}>Capa</legend>
       <SearchStatus covers={covers} />
       <div className={styles.strip}>
-        {options.map((option) => (
+        {(covers ?? []).map((cover) => (
           <Tile
-            key={option.id}
+            key={cover.url}
             name={name}
-            checked={pickedId === option.id}
+            checked={pickedUrl === cover.url}
             onPick={() => {
-              onPick({ kind: 'catalog', option });
+              onPick({ kind: 'found', cover });
             }}
-            label={`${option.title}, ${option.details}`}
+            label={cover.label}
           >
-            <img src={option.imageUrl} alt="" referrerPolicy="no-referrer" loading="lazy" />
+            <img src={cover.url} alt="" referrerPolicy="no-referrer" loading="lazy" />
           </Tile>
         ))}
         {upload && (
           <Tile
             name={name}
-            checked={choice.kind === 'upload'}
+            checked={pick.kind === 'upload'}
             onPick={() => {
-              onPick({ kind: 'upload', dataUrl: upload });
+              pickUpload(upload);
             }}
             label="Sua imagem"
           >
@@ -152,13 +182,13 @@ export function CoverPicker({ covers, choice, onPick }: CoverPickerProps) {
         <UploadTile
           onUpload={(dataUrl) => {
             setUpload(dataUrl);
-            onPick({ kind: 'upload', dataUrl });
+            pickUpload(dataUrl);
           }}
           onError={setUploadError}
         />
         <Tile
           name={name}
-          checked={choice.kind === 'none'}
+          checked={pick.kind === 'none'}
           onPick={() => {
             onPick({ kind: 'none' });
           }}
@@ -172,7 +202,14 @@ export function CoverPicker({ covers, choice, onPick }: CoverPickerProps) {
           {uploadError}
         </p>
       )}
-      <p className={styles.caption}>{describeChoice(choice)}</p>
+      <CoverSource
+        pick={pick}
+        error={sourceError}
+        onPick={(next) => {
+          if (next.kind === 'upload') setUploadSource(next.sourceUrl);
+          onPick(next);
+        }}
+      />
     </fieldset>
   );
 }

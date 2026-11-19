@@ -4,8 +4,8 @@ import type { Cycle, NominationId, OwnAnswer, VoteResults } from './types';
  * The check between nominations and the vote. Nominations stay hidden while
  * they come in (nobody is stopped from nominating a reading twice); once
  * everyone answered, the list opens and is checked for the same work
- * nominated more than once. The same work beyond doubt is merged on its own
- * into its first nomination; anything uncertain waits for the organizer.
+ * nominated more than once. The check only points: every group it finds
+ * (sure or not) waits for the organizer, who alone merges or keeps apart.
  */
 
 /** Readings the checker thinks are the same work, and why. */
@@ -28,11 +28,11 @@ export interface CycleReview {
  */
 export type Merged = Readonly<Record<NominationId, NominationId>>;
 
-/** What a duplicate check found. */
+/** What a duplicate check found; the organizer decides on every group. */
 export interface DuplicateFindings {
-  /** The same work beyond doubt (same book, same author): merged on their own. */
+  /** The same work beyond doubt, by the check's account (same book, same author). */
   same: ConflictGroup[];
-  /** Maybe the same work: the organizer decides. */
+  /** Maybe the same work. */
   unsure: ConflictGroup[];
 }
 
@@ -47,8 +47,6 @@ export const MAX_CONFLICT_GROUPS = 3;
 export const MAX_GROUP_SIZE = 3;
 /** The most merges a round may hold (the rules check them one by one). */
 export const MAX_MERGED = 8;
-/** The most merges one check may make on its own (the rest wait for the organizer). */
-export const MAX_AUTO_MERGES = 4;
 
 export function conflictIds(groups: readonly ConflictGroup[]): NominationId[] {
   return [...new Set(groups.flatMap((group) => group.ids))];
@@ -97,22 +95,6 @@ export function ballotSeat(ownNomination: NominationId | null, merged: Merged): 
 }
 
 /**
- * A merge the check makes on its own: every later nomination into the first
- * one, in arrival order. Null when that would move an earlier merge (a later
- * nomination already took others in), which the organizer then decides.
- */
-export function autoMerge(
-  merged: Merged,
-  group: readonly NominationId[],
-  nominationIds: readonly NominationId[],
-): Record<NominationId, NominationId> | null {
-  const [kept, ...later] = nominationIds.filter((id) => group.includes(id) && !(id in merged));
-  if (kept === undefined || later.length === 0) return null;
-  if (later.some((id) => Object.values(merged).includes(id))) return null;
-  return { ...merged, ...Object.fromEntries(later.map((id) => [id, kept])) };
-}
-
-/**
  * Whether flags fit what the rules accept: up to three groups of two or
  * three readings, apart, and over the whole round no more than one pair or
  * half the list (flags show the organizer who nominated them).
@@ -129,26 +111,26 @@ export function fitsFlagLimits(
   return groups.length <= MAX_CONFLICT_GROUPS && sized && total === ids.length && capped;
 }
 
+const MAX_REASON = 200;
+
 /**
- * What a check records: the same work merged on its own, up to
- * `MAX_AUTO_MERGES` (the rest, and anything a merge cannot settle, goes to
- * the organizer), and the uncertain groups flagged, if they fit the limits.
+ * What a check records for the organizer to validate: the sure groups first
+ * (marked "Certeza"), then the doubts (marked "Dúvida"), as many as the
+ * limits allow, in that order.
  */
-export function settleFindings(
+export function flagsFor(
   findings: DuplicateFindings,
-  cycle: Pick<Cycle, 'flagged' | 'nominationIds' | 'merged'>,
-): { merged: Merged; flags: ConflictGroup[] } {
-  let next: Merged = { ...cycle.merged };
-  const flags = [...findings.unsure];
-  for (const group of findings.same) {
-    const merge = autoMerge(next, group.ids, cycle.nominationIds);
-    const added = merge ? Object.keys(merge).length - Object.keys(cycle.merged).length : 0;
-    const fits =
-      merge !== null && added <= MAX_AUTO_MERGES && Object.keys(merge).length <= MAX_MERGED;
-    if (fits) next = merge;
-    else flags.push(group);
+  cycle: Pick<Cycle, 'flagged' | 'nominationIds'>,
+): ConflictGroup[] {
+  const marked = [
+    ...findings.same.map(({ ids, reason }) => ({ ids, reason: `Certeza: ${reason}` })),
+    ...findings.unsure.map(({ ids, reason }) => ({ ids, reason: `Dúvida: ${reason}` })),
+  ].map(({ ids, reason }) => ({ ids, reason: reason.slice(0, MAX_REASON) }));
+  const flags: ConflictGroup[] = [];
+  for (const group of marked) {
+    if (fitsFlagLimits([...flags, group], cycle)) flags.push(group);
   }
-  return { merged: next, flags: fitsFlagLimits(flags, cycle) ? flags : [] };
+  return flags;
 }
 
 /**

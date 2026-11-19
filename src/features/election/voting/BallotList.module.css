@@ -6,34 +6,61 @@
   list-style: none;
 }
 
-.row {
+/*
+ * Each row is a grid; the label (the part that chooses) spans it through a
+ * subgrid, and the synopsis sits on top of the label in its own cell, so
+ * tapping the text opens the card while tapping anywhere else chooses.
+ */
+.item {
+  --row-pad: 0.6875rem;
+
   position: relative;
   display: grid;
   grid-template-columns: 2.25rem minmax(0, 1fr) 1.375rem;
-  gap: 0.875rem;
-  align-items: center;
-  padding: 0.6875rem var(--gutter);
+  grid-template-rows: auto auto;
+  gap: 0.25rem 0.875rem;
+  padding: var(--row-pad) var(--gutter);
   border-block-end: 1px solid var(--line);
-  cursor: pointer;
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 
-.row:has(:focus-visible) {
+.row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  grid-template-columns: subgrid;
+  grid-template-rows: subgrid;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* The whole row chooses, padding included. */
+.row::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.item:has(.row :focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
-.row:has(:disabled) {
+.item:has(.row :disabled) .row {
   cursor: default;
 }
 
 .thumb {
+  grid-column: 1;
+  grid-row: 1 / -1;
   inline-size: 100%;
   box-shadow: 0 4px 10px -5px rgb(0 0 0 / 0.5);
 }
 
 .text {
   display: grid;
+  grid-column: 2;
+  grid-row: 1;
   min-inline-size: 0;
 }
 
@@ -55,9 +82,53 @@
   font-weight: 650;
 }
 
+/* The synopsis: a few lines that fade out; the card has the rest. */
+.read {
+  position: relative;
+  z-index: 1;
+  grid-column: 2;
+  grid-row: 2;
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  text-align: start;
+  cursor: zoom-in;
+}
+
+.read:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.excerpt {
+  --lines: 3;
+  --leading: 1.4;
+
+  display: block;
+  max-block-size: calc(var(--lines) * var(--leading) * 1em);
+  overflow: hidden;
+  font-size: var(--text-sm);
+  line-height: var(--leading);
+  mask-image: linear-gradient(to bottom, #000 35%, transparent);
+}
+
+.read:hover .excerpt {
+  color: var(--ink);
+}
+
+.empty .excerpt {
+  font-style: italic;
+  mask-image: none;
+}
+
 /* The box shows the rank: 1 or 2. */
 .box {
   display: grid;
+  grid-column: 3;
+  grid-row: 1 / -1;
   place-items: center;
   inline-size: 1.375rem;
   block-size: 1.375rem;
@@ -85,16 +156,31 @@
 }
 
 .own .thumb,
-.own .text {
+.own .text,
+.own .read {
   opacity: 0.5;
 }
 
+/* Wide screens: the synopsis becomes a column of its own. */
 @media (min-width: 60rem) {
   .list {
     margin-inline: 0;
   }
 
-  .row {
+  .item {
+    grid-template-columns: 2.75rem minmax(0, 0.8fr) minmax(0, 1.6fr) 1.375rem;
+    grid-template-rows: auto;
+    column-gap: var(--space-3);
     padding-inline: var(--space-3);
+  }
+
+  .read {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .box {
+    grid-column: 4;
   }
 }

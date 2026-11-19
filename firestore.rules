@@ -138,21 +138,33 @@ service cloud.firestore {
     }
 
     // Any kind of reading, described in free text: only sizes and link
-    // formats are checked.
+    // formats are checked. A synopsis always comes with the page it came
+    // from, and a cover with its own.
     function isSynopsis(book) {
       return (book.synopsis == null && book.synopsisSource == null)
         || (isText(book.synopsis, 1, 2000)
+          && isLink(book.synopsisUrl)
           && (book.synopsisSource == null
-            || book.synopsisSource in ['wikipedia', 'open-library', 'google-books', 'anilist']));
+            || book.synopsisSource
+              in ['publisher', 'google-books', 'wikipedia', 'open-library', 'anilist']));
     }
 
+    function isCover(book) {
+      return (book.coverUrl == null && book.coverSourceUrl == null)
+        || ((isLink(book.coverUrl) || isUploadedCover(book.coverUrl))
+          && isLink(book.coverSourceUrl));
+    }
+
+    // Checked when a reading is nominated; a winner is copied from its
+    // nomination as it was, so older nominations stay valid.
     function isBook(book) {
       return book is map
-        && hasExactly(book, ['title', 'synopsis', 'synopsisSource', 'synopsisUrl', 'coverUrl'])
+        && hasExactly(book, ['title', 'synopsis', 'synopsisSource', 'synopsisUrl', 'coverUrl',
+          'coverSourceUrl'])
         && isText(book.title, 1, 200)
         && isSynopsis(book)
         && (book.synopsisUrl == null || isLink(book.synopsisUrl))
-        && (book.coverUrl == null || isLink(book.coverUrl) || isUploadedCover(book.coverUrl));
+        && isCover(book);
     }
 
     function isBeforeDeadline(deadline) {
@@ -679,50 +691,20 @@ service cloud.firestore {
     }
 
     // What the check found, recorded once, by whichever member's device ran
-    // it first: the same work merged on its own, and the doubts flagged for
-    // the organizer. Flags let the organizer see who nominated those
-    // readings, so they are capped: every reading flagged in the round is
-    // kept in `flagged`, no more than one pair or half the list over the
+    // it first. It only points: every group waits for the organizer, who
+    // alone merges (editsReview). Flags let the organizer see who nominated
+    // those readings, so they are capped: every reading flagged in the round
+    // is kept in `flagged`, no more than one pair or half the list over the
     // whole round, and a check that flags much is not believed. Readings
     // already merged are not checked again.
     function recordsReview(before, after) {
       return before.status == 'nominating' && before.review != null
         && before.review.ids == null
-        && changesOnly(['review', 'flagged', 'merged'])
+        && changesOnly(['review', 'flagged'])
         && isReviewData(after.review, before.nominationIds)
         && !after.review.ids.hasAny(before.merged.keys())
         && after.flagged == before.flagged.concat(after.review.ids.removeAll(before.flagged))
-        && (after.flagged.size() <= 2 || after.flagged.size() * 2 <= before.nominationIds.size())
-        && (after.merged == before.merged || autoMerges(before, after));
-    }
-
-    // Merge i, if new: a later nomination into an earlier one (arrival
-    // order, so the first nominator's reading is the one that stays).
-    function mergesIntoEarlier(ids, m, old, ks, i) {
-      return i >= ks.size() || ks[i] in old
-        || ids.removeAll(ids.removeAll([m[ks[i]], ks[i]])) == [m[ks[i]], ks[i]];
-    }
-
-    // The check's own merges: only added, at most four, never a reading it
-    // also flagged, each one into an earlier nomination. Rules cannot tell
-    // whether two titles are the same work; this is what they can hold.
-    function autoMerges(before, after) {
-      let m = after.merged;
-      let added = m.diff(before.merged);
-      let ks = m.keys();
-      let ids = before.nominationIds;
-      return isMerge(m, ids)
-        && added.changedKeys().size() == 0 && added.removedKeys().size() == 0
-        && added.addedKeys().size() <= 4
-        && !after.review.ids.hasAny(ks) && !after.review.ids.hasAny(m.values())
-        && mergesIntoEarlier(ids, m, before.merged, ks, 0)
-        && mergesIntoEarlier(ids, m, before.merged, ks, 1)
-        && mergesIntoEarlier(ids, m, before.merged, ks, 2)
-        && mergesIntoEarlier(ids, m, before.merged, ks, 3)
-        && mergesIntoEarlier(ids, m, before.merged, ks, 4)
-        && mergesIntoEarlier(ids, m, before.merged, ks, 5)
-        && mergesIntoEarlier(ids, m, before.merged, ks, 6)
-        && mergesIntoEarlier(ids, m, before.merged, ks, 7);
+        && (after.flagged.size() <= 2 || after.flagged.size() * 2 <= before.nominationIds.size());
     }
 
     function isClearReview(cycle) {

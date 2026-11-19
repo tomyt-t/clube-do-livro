@@ -23,5 +23,11 @@
     "noFallthroughCasesInSwitch": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["vite.config.ts", "vite-plugins", "vitest.rules.config.ts", "tests"]
+  "include": [
+    "vite.config.ts",
+    "vite-plugins",
+    "vitest.rules.config.ts",
+    "tests",
+    "scripts/**/*.ts"
+  ]
 }

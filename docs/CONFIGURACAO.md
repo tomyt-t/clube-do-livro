@@ -144,8 +144,10 @@ Se alguém sumir e travar a rodada, use os botões de **Organizar** para avança
 
 ### Capas do Google Livros
 
-Sem chave, as capas vêm do Open Library e do AniList. Com chave, o Google Livros entra na busca
-e costuma ter as edições brasileiras.
+Sem chave, as capas e sinopses vêm dos sites das editoras, do Open Library, do AniList e da
+Wikipédia. Com chave, o Google Livros entra na busca: costuma ter as edições brasileiras e os
+textos de contracapa das editoras que não deixam o site consultá-las direto (Companhia das
+Letras, Todavia e outras). A cota gratuita é de 1.000 consultas por dia, e cada busca usa 2.
 
 1. No [Google Cloud Console](https://console.cloud.google.com), no mesmo projeto, ative a
    **Books API**.
@@ -181,11 +183,10 @@ O App Check impede que scripts fora do site usem o seu projeto Firebase.
 
 Quando todos respondem, a lista de indicações se abre e o site procura o mesmo livro, do mesmo
 autor, indicado mais de uma vez, inclusive em outra tradução ou edição ("Os Miseráveis" e "Les
-Misérables"). Livros diferentes nunca viram um só, nem volumes de uma série ou livros da mesma
-franquia. O que for certo vira uma opção só, sozinho (fica a indicação de quem indicou
-primeiro); o que for dúvida fica para quem organiza decidir. Sem o Gemini, o site só reconhece
-título e autor idênticos como certos, e o mesmo título com autor diferente ou sem autor como
-dúvida.
+Misérables"). Volumes de uma série e livros diferentes da mesma franquia não contam. A conferência
+só aponta, marcando cada grupo como certeza ou dúvida; quem organiza valida cada um em
+**Organizar**, e a votação abre quando não sobrar nenhum. Sem o Gemini, o site só aponta título e
+autor idênticos (certeza) e o mesmo título com autor diferente ou sem autor (dúvida).
 
 A conferência roda no aparelho do primeiro membro que abrir o site depois que todos responderem,
 e o resultado fica gravado; você não precisa estar on-line. Uma pessoa liberada para trocar

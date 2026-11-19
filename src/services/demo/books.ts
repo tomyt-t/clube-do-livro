@@ -12,6 +12,7 @@ function book(title: string, cover: number, wiki: string, synopsis: string): Boo
     synopsisSource: null,
     synopsisUrl: `https://pt.wikipedia.org/wiki/${wiki}`,
     coverUrl: `https://covers.openlibrary.org/b/id/${String(cover)}-L.jpg`,
+    coverSourceUrl: 'https://openlibrary.org/',
   };
 }
 

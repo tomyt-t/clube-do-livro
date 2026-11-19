@@ -55,6 +55,18 @@ describe('ballot, list view', () => {
     expect(choice(/Quarto de Despejo/)).toBeEnabled();
   });
 
+  it('shows each synopsis and opens its card when tapped, without choosing it', async () => {
+    const { user } = renderBallot();
+    const read = await screen.findByRole('button', { name: 'Ler a sinopse de Quarto de Despejo' });
+    expect(read).toHaveTextContent(/\S/);
+
+    await user.click(read);
+    expect(
+      screen.getByRole('article', { name: 'Leitura 4 de 5: Quarto de Despejo' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/de 2 escolhidas/)).toHaveTextContent('0 de 2 escolhidas');
+  });
+
   it('swaps the order and confirms an anonymous ballot', async () => {
     const { user, backend } = renderBallot();
     await user.click(await screen.findByRole('checkbox', { name: /Dom Casmurro/ }));

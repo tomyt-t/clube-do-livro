@@ -1,5 +1,7 @@
 import type { SourceRequest } from './types';
 
+/** Small helpers for reading the catalogs' JSON, which is never trusted to have any shape. */
+
 export async function fetchJson(
   url: string,
   { fetcher, signal }: SourceRequest,
@@ -24,12 +26,4 @@ export function textAt(value: unknown, key: string): string | null {
   if (!isRecord(value)) return null;
   const text = value[key];
   return typeof text === 'string' && text.trim() !== '' ? text.trim() : null;
-}
-
-/** "Kentaro Miura · Mangá · 1989" without the empty parts. */
-export function joinDetails(parts: readonly (string | number | null | undefined)[]): string {
-  return parts
-    .filter((part) => part !== null && part !== undefined && part !== '')
-    .map(String)
-    .join(' · ');
 }

@@ -154,8 +154,8 @@ export interface FlowPort {
   /** Everyone answered: the list opens and no more nominations come in. */
   startReview(cycleId: CycleId): Promise<void>;
   /** Records what the duplicate check found (maybe nothing); once per check. */
-  /** What the check found: groups left to the organizer, and the merges it made on its own. */
-  recordReview(cycleId: CycleId, groups: readonly ConflictGroup[], merged: Merged): Promise<void>;
+  /** What the check found, for the organizer to validate. */
+  recordReview(cycleId: CycleId, groups: readonly ConflictGroup[]): Promise<void>;
   /** Fixes the ballot's options and opens the tally. */
   startVoting(input: StartVotingInput): Promise<void>;
   closeVoting(cycleId: CycleId): Promise<void>;

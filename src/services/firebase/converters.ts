@@ -110,6 +110,8 @@ export function toBook(value: unknown): Book | null {
     synopsisSource: synopsis === null ? null : oneOf(value.synopsisSource, SYNOPSIS_SOURCES),
     synopsisUrl: textOrNull(value.synopsisUrl),
     coverUrl: textOrNull(value.coverUrl),
+    // Older nominations were saved before covers named their source.
+    coverSourceUrl: textOrNull(value.coverSourceUrl),
   };
 }
 

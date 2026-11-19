@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FlowStep } from '@/domain/flow';
-import { openingResults, type ConflictGroup, type Merged } from '@/domain/review';
+import { openingResults, type ConflictGroup } from '@/domain/review';
 import type { Cycle } from '@/domain/types';
 import { drawNumber } from '@/domain/draw';
 import { makeBook, makeCycle } from '@/test/factories';
@@ -196,7 +196,7 @@ describe('the review before the vote', () => {
     expect(cycle.review?.conflicts).toEqual([
       {
         ids: [dom, twice],
-        reason: 'Mesmo título, com autor diferente ou sem autor: Dom Casmurro.',
+        reason: 'Dúvida: Mesmo título, com autor diferente ou sem autor: Dom Casmurro.',
       },
     ]);
 
@@ -251,10 +251,10 @@ describe('the duplicate check', () => {
 
   async function check(cycle: Partial<Cycle>, unsure: ConflictGroup[], same: ConflictGroup[] = []) {
     const seen: string[][] = [];
-    const recorded: { flags: ConflictGroup[]; merged: Merged }[] = [];
+    const recorded: ConflictGroup[][] = [];
     const flow = {
-      recordReview: (_id: string, flags: readonly ConflictGroup[], merged: Merged) => {
-        recorded.push({ flags: [...flags], merged });
+      recordReview: (_id: string, flags: readonly ConflictGroup[]) => {
+        recorded.push([...flags]);
         return Promise.resolve();
       },
     } as unknown as FlowPort;
@@ -270,7 +270,7 @@ describe('the duplicate check', () => {
       nominations: LIST,
       checker,
     });
-    return { seen: seen[0], recorded: recorded[0]?.flags, merged: recorded[0]?.merged };
+    return { seen: seen[0], recorded: recorded[0] };
   }
 
   it('checks only what would be on the ballot', async () => {
@@ -282,21 +282,19 @@ describe('the duplicate check', () => {
   it('does not raise again a group already sorted out this round', async () => {
     const settled = { ids: ['a', 'b'], reason: 'Mesmo título.' };
     expect((await check({ flagged: ['a', 'b'] }, [settled])).recorded).toEqual([]);
-    expect((await check({ flagged: ['a'] }, [settled])).recorded).toEqual([settled]);
+    expect((await check({ flagged: ['a'] }, [settled])).recorded).toEqual([
+      { ids: ['a', 'b'], reason: 'Dúvida: Mesmo título.' },
+    ]);
   });
 
-  it('merges the same work into its first nomination, on its own', async () => {
+  it('only points the same work out: the organizer validates every group', async () => {
     const same = [{ ids: ['c', 'a'], reason: 'Mesma obra.' }];
-    const { recorded, merged } = await check({}, [], same);
-    expect(merged).toEqual({ c: 'a' });
-    expect(recorded).toEqual([]);
-  });
-
-  it('leaves to the organizer a merge it cannot make on its own', async () => {
-    // b already took c in: merging a and b would move that earlier merge.
-    const same = [{ ids: ['a', 'b'], reason: 'Mesma obra.' }];
-    const { recorded, merged } = await check({ merged: { c: 'b' } }, [], same);
-    expect(merged).toEqual({ c: 'b' });
-    expect(recorded).toEqual(same);
+    const unsure = [{ ids: ['b', 'd'], reason: 'Talvez.' }];
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    const { recorded } = await check({ nominationIds: ids }, unsure, same);
+    expect(recorded).toEqual([
+      { ids: ['c', 'a'], reason: 'Certeza: Mesma obra.' },
+      { ids: ['b', 'd'], reason: 'Dúvida: Talvez.' },
+    ]);
   });
 });

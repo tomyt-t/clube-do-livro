@@ -8,6 +8,7 @@ export function makeBook(overrides: Partial<Book> = {}): Book {
     synopsisSource: null,
     synopsisUrl: 'https://example.com/torto-arado',
     coverUrl: 'https://covers.openlibrary.org/b/id/12369648-L.jpg',
+    coverSourceUrl: 'https://openlibrary.org/works/OL20644496W',
     ...overrides,
   };
 }

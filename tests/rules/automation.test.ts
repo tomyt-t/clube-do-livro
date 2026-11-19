@@ -78,11 +78,11 @@ describe('the review, then the vote', () => {
 
   it('records the check once, then opens the vote if nothing was flagged', async () => {
     await seedAnswered(env);
-    await assertFails(recordReview(asCaio(), CYCLE, [], {}));
+    await assertFails(recordReview(asCaio(), CYCLE, []));
     await startReview(asCaio(), CYCLE);
     await assertFails(openVote(ALL_NOMINATIONS));
-    await assertSucceeds(recordReview(asCaio(), CYCLE, [], {}));
-    await assertFails(recordReview(asCaio(), CYCLE, [], {}));
+    await assertSucceeds(recordReview(asCaio(), CYCLE, []));
+    await assertFails(recordReview(asCaio(), CYCLE, []));
     await assertSucceeds(openVote(ALL_NOMINATIONS));
   });
 

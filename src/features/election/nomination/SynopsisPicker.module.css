@@ -1,0 +1,94 @@
+.picker {
+  display: grid;
+  gap: var(--space-3);
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+
+/* The sources, as small tabs that wrap; the chosen one is inked, never color alone. */
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pill {
+  padding: 0.3125rem 0.75rem;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font: 600 var(--text-xs) / 1.3 var(--sans);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.pill:hover {
+  color: var(--ink);
+}
+
+.pill:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.on,
+.on:hover {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.found {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* The text as the club will read it, scrolling inside when long. */
+.text {
+  max-block-size: 18rem;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.credit {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+
+.own {
+  display: grid;
+  gap: var(--space-4);
+}

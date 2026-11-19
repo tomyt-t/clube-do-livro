@@ -2,53 +2,59 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Nomination, OwnAnswer } from '@/domain/types';
-import { searchCovers, type CoverOption } from '@/services/covers';
 import { createDemoBackend, createDemoState, type DemoScenario } from '@/services/demo';
-import { findSynopsis } from '@/services/synopsis';
+import { lookupBook, NOTHING_FOUND, type LookupResult } from '@/services/lookup';
 import { firstValue, settle } from '@/test/backend';
 import { renderAsMember } from '@/test/render';
 
 import { ElectionPage } from './ElectionPage';
 import { resizeCover } from './nomination/resize-cover';
 
-vi.mock('@/services/covers', async (importOriginal) => ({
+vi.mock('@/services/lookup', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  searchCovers: vi.fn(),
-}));
-vi.mock('@/services/synopsis', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  findSynopsis: vi.fn(),
+  lookupBook: vi.fn(),
 }));
 vi.mock('./nomination/resize-cover', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   resizeCover: vi.fn(),
 }));
 
-const fromAniList: CoverOption = {
-  id: 'anilist:1',
-  imageUrl: 'https://s4.anilist.co/berserk.jpg',
-  title: 'Berserk',
-  details: 'Kentarou Miura · Mangá',
-  source: 'anilist',
-  synopsis: 'Guts.',
-  workKey: null,
-};
-
-const fromOpenLibrary: CoverOption = {
-  ...fromAniList,
-  id: 'open-library:2',
-  imageUrl: 'https://covers.openlibrary.org/b/id/2-L.jpg',
-  details: 'Kentaro Miura · 1990',
-  source: 'open-library',
-  synopsis: null,
-  workKey: '/works/OL2W',
+/** What the search finds for "Berserk": two covers and two synopses to switch between. */
+const FOUND: LookupResult = {
+  work: { title: 'Berserk', authors: ['Kentaro Miura'], details: 'Panini, 2005' },
+  covers: [
+    {
+      url: 'https://s4.anilist.co/berserk.jpg',
+      sourceUrl: 'https://anilist.co/manga/30002',
+      source: 'anilist',
+      label: 'AniList · 1989',
+    },
+    {
+      url: 'https://covers.openlibrary.org/b/id/2-L.jpg',
+      sourceUrl: 'https://openlibrary.org/works/OL2W',
+      source: 'open-library',
+      label: 'Open Library · Panini, 2005',
+    },
+  ],
+  synopses: [
+    {
+      text: 'Guts é um guerreiro errante.',
+      sourceUrl: 'https://pt.wikipedia.org/wiki/Berserk_(mang%C3%A1)',
+      source: 'wikipedia',
+      label: 'Wikipédia · início do enredo',
+    },
+    {
+      text: 'Um mercenário enfrenta demônios.',
+      sourceUrl: 'https://books.google.com/books?id=1',
+      source: 'google-books',
+      label: 'Google Livros · Panini',
+    },
+  ],
+  others: [],
 };
 
 beforeEach(() => {
-  vi.mocked(searchCovers).mockResolvedValue([fromAniList, fromOpenLibrary]);
-  vi.mocked(findSynopsis).mockImplementation(({ option }) =>
-    Promise.resolve(option ? { text: `Sinopse do ${option.source}`, source: option.source } : null),
-  );
+  vi.mocked(lookupBook).mockResolvedValue(FOUND);
 });
 
 function renderElection(uid = 'marina', scenario: DemoScenario = 'nominating') {
@@ -81,14 +87,19 @@ async function rowOf(title: string) {
   return row;
 }
 
-async function fillDetails(user: ReturnType<typeof renderElection>['user'], title: string) {
+async function fillDetails(
+  user: ReturnType<typeof renderElection>['user'],
+  title: string,
+  author = '',
+) {
   await user.click(await screen.findByRole('button', { name: 'Indicar uma leitura' }));
-  await user.type(screen.getByLabelText('Título / autor'), title);
+  await user.type(screen.getByLabelText('Título'), title);
+  if (author) await user.type(screen.getByLabelText('Autor (opcional)'), author);
   await user.click(screen.getByRole('button', { name: 'Continuar' }));
 }
 
 async function confirmSending(user: ReturnType<typeof renderElection>['user']) {
-  await user.click(screen.getByRole('button', { name: 'Enviar indicação' }));
+  await user.click(await screen.findByRole('button', { name: 'Enviar indicação' }));
   const dialog = screen.getByRole('dialog', { name: 'Enviar esta indicação?' });
   await user.click(within(dialog).getByRole('button', { name: 'Enviar indicação' }));
   expect(await screen.findByText('Sua indicação foi registrada.')).toBeInTheDocument();
@@ -111,10 +122,13 @@ describe('ElectionPage, nominations', () => {
 
   it('takes a title someone already nominated: the check after the call sorts it out', async () => {
     const { user } = renderElection();
-    await fillDetails(user, 'ensaio sobre a cegueira — JOSÉ SARAMAGO');
+    await fillDetails(user, 'ensaio sobre a cegueira', 'JOSÉ SARAMAGO');
 
     await waitFor(() => {
-      expect(searchCovers).toHaveBeenCalled();
+      expect(lookupBook).toHaveBeenCalledWith(
+        'ensaio sobre a cegueira, JOSÉ SARAMAGO',
+        expect.anything(),
+      );
     });
     expect(screen.queryByText(/Já indicaram/)).not.toBeInTheDocument();
   });
@@ -130,45 +144,86 @@ describe('ElectionPage, nominations', () => {
     expect(screen.queryByRole('button', { name: 'Indicar uma leitura' })).not.toBeInTheDocument();
   });
 
-  it('checks the title and the link before searching anything', async () => {
+  it('asks for the title before searching anything', async () => {
     const { user } = renderElection();
     await user.click(await screen.findByRole('button', { name: 'Indicar uma leitura' }));
-    await user.type(screen.getByLabelText('Link para a sinopse (opcional)'), 'wikipedia.org');
+    await user.type(screen.getByLabelText('Autor (opcional)'), 'Kentaro Miura');
     await user.click(screen.getByRole('button', { name: 'Continuar' }));
 
-    expect(screen.getByText('Escreva o título e, se quiser, o autor.')).toBeInTheDocument();
-    expect(screen.getByText('Use um link completo, começando com https://.')).toBeInTheDocument();
-    expect(searchCovers).not.toHaveBeenCalled();
+    expect(screen.getByText('Escreva o título da leitura.')).toBeInTheDocument();
+    expect(lookupBook).not.toHaveBeenCalled();
   });
 
-  it('nominates with the chosen cover and the synopsis found for it, edited', async () => {
+  it('nominates with what was found, switching sources, each with the page it came from', async () => {
     const { user, backend } = renderElection();
-    await fillDetails(user, 'Berserk, Kentaro Miura');
+    await fillDetails(user, 'Berserk', 'Kentaro Miura');
 
-    expect(await screen.findByRole('radio', { name: /Kentarou Miura/ })).toBeChecked();
-    // The synopsis arrives after the cover is chosen.
-    const synopsis = await screen.findByDisplayValue('Sinopse do anilist');
-    expect(synopsis).toBe(screen.getByLabelText('Sinopse (opcional)'));
+    expect(await screen.findByText(/Encontramos:/)).toHaveTextContent(
+      'Encontramos: Berserk, de Kentaro Miura (Panini, 2005).',
+    );
+    expect(screen.getByRole('radio', { name: 'AniList · 1989' })).toBeChecked();
+    expect(screen.getByText('Guts é um guerreiro errante.')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('radio', { name: /Kentaro Miura · 1990/ }));
-    expect(await screen.findByDisplayValue('Sinopse do open-library')).toBeInTheDocument();
-    expect(screen.getByText('Sinopse: Open Library. Dá para editar.')).toBeInTheDocument();
-    await user.clear(synopsis);
-    await user.type(synopsis, 'Um espadachim contra o destino.');
+    await user.click(screen.getByRole('radio', { name: 'Open Library · Panini, 2005' }));
+    await user.click(screen.getByRole('radio', { name: 'Google Livros · Panini' }));
+    expect(screen.getByText('Um mercenário enfrenta demônios.')).toBeInTheDocument();
+    expect(screen.queryByText('Guts é um guerreiro errante.')).not.toBeInTheDocument();
     await confirmSending(user);
 
     expect(await rowOf('Berserk')).toHaveTextContent('Sua indicação');
     expect(await sentBook(backend)).toEqual({
       title: 'Berserk, Kentaro Miura',
-      synopsis: 'Um espadachim contra o destino.',
-      synopsisSource: 'open-library',
-      synopsisUrl: null,
+      synopsis: 'Um mercenário enfrenta demônios.',
+      synopsisSource: 'google-books',
+      synopsisUrl: 'https://books.google.com/books?id=1',
       coverUrl: 'https://covers.openlibrary.org/b/id/2-L.jpg',
+      coverSourceUrl: 'https://openlibrary.org/works/OL2W',
     });
   });
 
-  it('goes on without a cover when the catalogs find nothing', async () => {
-    vi.mocked(searchCovers).mockResolvedValue([]);
+  it('edits a synopsis found, keeping its source', async () => {
+    const { user, backend } = renderElection();
+    await fillDetails(user, 'Berserk');
+
+    await user.click(await screen.findByRole('button', { name: 'Editar este texto' }));
+    const text = screen.getByLabelText('Texto da sinopse');
+    await user.clear(text);
+    await user.type(text, 'Um espadachim contra o destino.');
+    expect(screen.getByLabelText('Link de onde veio a sinopse')).toHaveValue(
+      'https://pt.wikipedia.org/wiki/Berserk_(mang%C3%A1)',
+    );
+    await confirmSending(user);
+
+    expect(await sentBook(backend)).toMatchObject({
+      synopsis: 'Um espadachim contra o destino.',
+      synopsisSource: 'wikipedia',
+      synopsisUrl: 'https://pt.wikipedia.org/wiki/Berserk_(mang%C3%A1)',
+    });
+  });
+
+  it('asks where a synopsis the member pastes came from', async () => {
+    vi.mocked(lookupBook).mockResolvedValue(NOTHING_FOUND);
+    const { user, backend } = renderElection();
+    await fillDetails(user, 'Zine do bairro');
+
+    expect(await screen.findByText(/Não encontramos uma sinopse/)).toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: 'Escrever ou colar' }));
+    await user.type(screen.getByLabelText('Texto da sinopse'), 'Histórias da rua de cima.');
+    await user.click(screen.getByRole('button', { name: 'Enviar indicação' }));
+    expect(screen.getByText('Cole o link da página de onde veio a sinopse.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Link de onde veio a sinopse'), 'https://zine.org/1');
+    await confirmSending(user);
+    expect(await sentBook(backend)).toMatchObject({
+      synopsis: 'Histórias da rua de cima.',
+      synopsisSource: null,
+      synopsisUrl: 'https://zine.org/1',
+    });
+  });
+
+  it('goes on without a cover or synopsis when the catalogs find nothing', async () => {
+    vi.mocked(lookupBook).mockResolvedValue(NOTHING_FOUND);
     const { user, backend } = renderElection();
     await fillDetails(user, 'Zine do bairro');
 
@@ -176,17 +231,19 @@ describe('ElectionPage, nominations', () => {
       await screen.findByText('Nenhuma capa encontrada. Envie uma imagem ou siga sem capa.'),
     ).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Sem capa' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Sem sinopse' })).toBeChecked();
     await confirmSending(user);
 
     expect(await sentBook(backend)).toMatchObject({
       title: 'Zine do bairro',
       coverUrl: null,
+      coverSourceUrl: null,
       synopsis: null,
       synopsisSource: null,
     });
   });
 
-  it('uses an image the member uploads', async () => {
+  it('uses an image the member uploads, with the page it came from', async () => {
     vi.mocked(resizeCover).mockResolvedValue('data:image/jpeg;base64,AAAA');
     const { user, backend } = renderElection();
     await fillDetails(user, 'Berserk');
@@ -194,20 +251,27 @@ describe('ElectionPage, nominations', () => {
     const photo = new File(['capa'], 'capa.jpg', { type: 'image/jpeg' });
     await user.upload(await screen.findByLabelText(/Enviar imagem/), photo);
     expect(await screen.findByRole('radio', { name: 'Sua imagem' })).toBeChecked();
-    await confirmSending(user);
+    await user.click(screen.getByRole('button', { name: 'Enviar indicação' }));
+    expect(screen.getByText('Cole o link da página de onde veio a imagem.')).toBeInTheDocument();
 
-    expect((await sentBook(backend))?.coverUrl).toBe('data:image/jpeg;base64,AAAA');
+    await user.type(
+      screen.getByLabelText('Link da página de onde veio a imagem'),
+      'https://loja.com/berserk',
+    );
+    await confirmSending(user);
+    expect(await sentBook(backend)).toMatchObject({
+      coverUrl: 'data:image/jpeg;base64,AAAA',
+      coverSourceUrl: 'https://loja.com/berserk',
+    });
   });
 
-  it('says when the cover search fails, and still lets the member go on', async () => {
-    vi.mocked(searchCovers).mockRejectedValue(new Error('offline'));
+  it('treats a failed search as nothing found, and still lets the member go on', async () => {
+    vi.mocked(lookupBook).mockRejectedValue(new Error('offline'));
     const { user } = renderElection();
     await fillDetails(user, 'Berserk');
 
     expect(
-      await screen.findByText(
-        'Não foi possível buscar capas agora. Envie uma imagem ou siga sem capa.',
-      ),
+      await screen.findByText('Nenhuma capa encontrada. Envie uma imagem ou siga sem capa.'),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Enviar indicação' })).toBeEnabled();
   });

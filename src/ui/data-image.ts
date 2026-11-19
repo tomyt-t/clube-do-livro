@@ -70,11 +70,15 @@ function webpSize(b: Uint8Array): Size | null {
   return null;
 }
 
+/** The size a PNG, JPEG or WebP declares in its header, or null for anything else. */
+export function imageSize(bytes: Uint8Array): Size | null {
+  return pngSize(bytes) ?? jpegSize(bytes) ?? webpSize(bytes);
+}
+
 /** The image's declared size, or null if it cannot be read. */
 export function dataImageSize(dataUrl: string): Size | null {
   const bytes = bytesOf(dataUrl);
-  if (!bytes) return null;
-  return pngSize(bytes) ?? jpegSize(bytes) ?? webpSize(bytes);
+  return bytes ? imageSize(bytes) : null;
 }
 
 /** Whether an uploaded (data-URL) cover is safe to decode. */

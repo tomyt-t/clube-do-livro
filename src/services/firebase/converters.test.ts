@@ -77,6 +77,7 @@ describe('toBook', () => {
       synopsisSource: null,
       synopsisUrl: null,
       coverUrl: null,
+      coverSourceUrl: null,
     });
   });
 

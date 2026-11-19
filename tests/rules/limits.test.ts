@@ -177,7 +177,7 @@ describe('merged readings at the largest ballot', () => {
 });
 
 describe('the check at the largest round', () => {
-  it('records four merges of its own and a flagged pair at once', async () => {
+  it('records three flagged groups at once, for the organizer to validate', async () => {
     const ids = Array.from(
       { length: MAX_OPTIONS },
       (_, i): NominationId => `Reading${String(i).padStart(13, '0')}`,
@@ -188,9 +188,11 @@ describe('the check at the largest round', () => {
       review: { ids: null, groups: [] },
     });
     const at = (i: number) => ids[i] ?? '';
-    // The last four, each into an earlier one; the first two flagged for the organizer.
-    const merged = Object.fromEntries([12, 13, 14, 15].map((i) => [at(i), at(i - 10)]));
-    const flags = [{ ids: [at(0), at(1)], reason: 'Talvez a mesma obra.' }];
-    await assertSucceeds(recordReview(dbAs(env, caio), CYCLE, flags, merged));
+    const flags = [
+      { ids: [at(0), at(1), at(2)], reason: 'Certeza: a mesma obra.' },
+      { ids: [at(5), at(9)], reason: 'Dúvida: talvez a mesma.' },
+      { ids: [at(13), at(15)], reason: 'Dúvida: talvez a mesma.' },
+    ];
+    await assertSucceeds(recordReview(dbAs(env, caio), CYCLE, flags));
   });
 });

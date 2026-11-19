@@ -26,6 +26,7 @@ import {
   admin,
   ana,
   bia,
+  caio,
   createEnv,
   CYCLE,
   dbAs,
@@ -276,12 +277,26 @@ describe('book validation', () => {
     await assertSucceeds(rawNominate(dbAs(env, ana), ana.uid, { ...valid, coverUrl }));
   });
 
-  it('accepts a synopsis credited to a catalog, or none at all', async () => {
+  it("accepts a synopsis credited to a catalog or a publisher's site, or none at all", async () => {
     await assertSucceeds(
       rawNominate(dbAs(env, ana), ana.uid, { ...valid, synopsisSource: 'wikipedia' }),
     );
     await assertSucceeds(
-      rawNominate(dbAs(env, bia), bia.uid, { ...valid, synopsis: null, synopsisSource: null }),
+      rawNominate(dbAs(env, bia), bia.uid, { ...valid, synopsisSource: 'publisher' }),
+    );
+    await assertSucceeds(
+      rawNominate(dbAs(env, caio), caio.uid, {
+        ...valid,
+        synopsis: null,
+        synopsisSource: null,
+        synopsisUrl: null,
+      }),
+    );
+  });
+
+  it('accepts a reading with no cover, and so no cover source', async () => {
+    await assertSucceeds(
+      rawNominate(dbAs(env, ana), ana.uid, { ...valid, coverUrl: null, coverSourceUrl: null }),
     );
   });
 
@@ -293,6 +308,10 @@ describe('book validation', () => {
     ['an unknown synopsis source', { synopsisSource: 'blog' }],
     ['a source without a synopsis', { synopsis: null, synopsisSource: 'anilist' }],
     ['a non-https synopsis link', { synopsisUrl: 'http://example.com/sinopse' }],
+    ['a synopsis without the page it came from', { synopsisUrl: null }],
+    ['a cover without the page it came from', { coverSourceUrl: null }],
+    ['a non-https cover source', { coverSourceUrl: 'http://example.com/capa' }],
+    ['a cover source without a cover', { coverUrl: null }],
     ['a script link as cover', { coverUrl: 'javascript:alert(1)' }],
     ['an SVG upload', { coverUrl: 'data:image/svg+xml;base64,PHN2Zz4=' }],
     ['an oversized upload', { coverUrl: `data:image/jpeg;base64,${'A'.repeat(200_001)}` }],
@@ -302,9 +321,8 @@ describe('book validation', () => {
     await assertFails(rawNominate(dbAs(env, ana), ana.uid, { ...valid, ...change }));
   });
 
-  it('rejects a book missing a field', async () => {
-    const partial: Record<string, unknown> = { ...valid };
-    delete partial.synopsisUrl;
+  it.each(['synopsisUrl', 'coverSourceUrl'])('rejects a book missing %s', async (field) => {
+    const partial = Object.fromEntries(Object.entries(valid).filter(([key]) => key !== field));
     await assertFails(rawNominate(dbAs(env, ana), ana.uid, partial));
   });
 });

@@ -11,18 +11,21 @@ colocar no ar está em [`docs/CONFIGURACAO.md`](docs/CONFIGURACAO.md).
 - **Entrada só para o clube.** Login com Google ou por link no email. Só entram os emails da
   lista, e o aparelho continua conectado até a pessoa sair.
 - **Indicação.** Cada membro indica uma leitura (livro, mangá, quadrinho, o que for) ou passa a
-  vez (até 16 leituras por rodada). A capa e a sinopse vêm dos catálogos (Open Library, AniList, Google Livros) ou do link da
-  Wikipédia. As indicações ficam escondidas até todos responderem e quem indicou nunca aparece.
+  vez (até 16 leituras por rodada). Pelo título e autor, o site busca capas e sinopses nos sites
+  das editoras, no Google Livros, no Open Library, no AniList e na Wikipédia, sem nenhum servidor
+  próprio. Das sinopses fica só o trecho que conta a história, e quem indica alterna entre as
+  fontes, edita ou cola outra. Toda capa e toda sinopse guardam o link de onde vieram. As
+  indicações ficam escondidas até todos responderem e quem indicou nunca aparece.
   Ninguém é barrado por indicar o mesmo livro que outra pessoa: a conferência resolve depois.
 - **Conferência.** Quando todos respondem, a lista se abre para todos e o site procura o mesmo
   livro, do mesmo autor, indicado mais de uma vez, mesmo em outra tradução ou edição ("Os
-  Miseráveis" e "Les Misérables"). Livros diferentes nunca viram um só, nem volumes de uma série
-  ("Mercenários 1" e "2") ou livros da mesma franquia ("Harry Potter e a Pedra Filosofal" e "o
-  Cálice de Fogo"). Quando é certo que é o mesmo livro, ele vira uma opção só, sozinho: fica a
-  indicação de quem indicou primeiro, que vota normalmente; quem indicou depois tem a indicação
-  anulada e já vota nesse livro em 1ª opção, sobrando só a 2ª. Na dúvida, quem organiza decide
-  (e pode também liberar alguém para trocar a indicação). Sem o Gemini, só títulos e autores
-  idênticos contam como certos.
+  Miseráveis" e "Les Misérables"); com o Gemini, se configurado. Volumes de uma série
+  ("Mercenários 1" e "2") e livros diferentes da mesma franquia ("Harry Potter e a Pedra
+  Filosofal" e "o Cálice de Fogo") não contam. A conferência só aponta, marcando cada grupo como
+  certeza ou dúvida; quem organiza valida cada um. Ao juntar, fica a indicação de quem indicou
+  primeiro, que vota normalmente; quem indicou depois tem a indicação anulada e já vota nesse
+  livro em 1ª opção, sobrando só a 2ª. Quem organiza também pode manter separadas ou liberar
+  alguém para trocar a indicação. Os outros membros só veem que houve um conflito.
 - **Votação.** Em lista ou em cartas, cada um escolhe uma 1ª e uma 2ª opção, nunca a própria
   indicação. Vence quem tiver mais votos. Empatou, vence quem tiver mais votos de 1ª opção. Se
   ainda empatar, há um sorteio que qualquer um pode conferir.
@@ -63,12 +66,9 @@ O que as regras não conseguem impedir, e por quê:
   votar outra vez na rodada) e decidir que duas leituras são a mesma. Ainda assim, as regras
   limitam quantas leituras dá para marcar por rodada e não deixam abrir a votação antes de quem
   foi liberado responder (ou de passarem 3 dias).
-- **A conferência roda no navegador:** as regras não sabem dizer se dois títulos são o mesmo
-  livro. Um app adulterado pode pular a conferência (as repetidas vão separadas para a cédula),
-  marcar leituras à toa, dentro do limite da rodada (o que mostra a quem organiza quem as
-  indicou), ou juntar dois livros diferentes. Para isso as regras exigem que a indicação que
-  fica seja a mais antiga, no máximo quatro junções por vez e nunca uma leitura marcada para
-  quem organiza decidir.
+- **A conferência roda no navegador:** um app adulterado pode pular a conferência (as repetidas
+  vão separadas para a cédula) ou marcar leituras à toa, dentro do limite da rodada, o que mostra
+  a quem organiza quem as indicou. Juntar leituras, só quem organiza pode.
 - **Contagem parcial:** ao votar, um app adulterado pode tentar valores até acertar a contagem
   atual das leituras em que votou. Fica sabendo só disso, só uma vez, e o voto vale normalmente.
 - **Ordem de chegada:** a lista guarda as indicações na ordem em que chegaram, então quem
@@ -99,8 +99,7 @@ src/
   services/    a interface do backend e suas implementações
     firebase/  a de verdade (Auth + Firestore)
     demo/      a de exemplo, em memória, que aplica as mesmas regras
-    covers/    busca de capas nos catálogos
-    synopsis/  sinopses do catálogo escolhido ou da Wikipédia
+    lookup/    busca de capas e sinopses (editoras, catálogos, Wikipédia) e a escolha da melhor
     duplicates/ conferência de indicações repetidas (prompt do Gemini e versão do demo)
   features/    as telas: login, leitura, votação, histórico, organizar
   ui/          componentes e estilos compartilhados

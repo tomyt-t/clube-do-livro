@@ -1,6 +1,7 @@
 import type { SynopsisSource } from '@/domain/types';
 
 const SOURCE_NAMES: Record<SynopsisSource, string> = {
+  publisher: 'site da editora',
   wikipedia: 'Wikipédia',
   'open-library': 'Open Library',
   'google-books': 'Google Livros',

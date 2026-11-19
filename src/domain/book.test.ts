@@ -34,9 +34,12 @@ describe('normalizeBook', () => {
   });
 
   it('turns blank links into missing links', () => {
-    const book = normalizeBook(makeBook({ coverUrl: '   ', synopsisUrl: ' ' }));
+    const book = normalizeBook(
+      makeBook({ coverUrl: '   ', synopsisUrl: ' ', coverSourceUrl: ' ' }),
+    );
     expect(book.coverUrl).toBeNull();
     expect(book.synopsisUrl).toBeNull();
+    expect(book.coverSourceUrl).toBeNull();
   });
 });
 
@@ -53,8 +56,26 @@ describe('validateBook', () => {
       synopsisSource: null,
       synopsisUrl: null,
       coverUrl: null,
+      coverSourceUrl: null,
     };
     expect(validateBook(bare)).toEqual([]);
+  });
+
+  it('requires the page a synopsis came from', () => {
+    expect(validateBook(makeBook({ synopsisUrl: null }))).toEqual(['synopsis-link-missing']);
+    expect(validateBook(makeBook({ synopsis: null, synopsisUrl: null }))).toEqual([]);
+  });
+
+  it('requires the page a cover came from, as a secure link', () => {
+    expect(validateBook(makeBook({ coverSourceUrl: null }))).toEqual(['cover-source-missing']);
+    expect(validateBook(makeBook({ coverSourceUrl: 'http://example.com' }))).toEqual([
+      'cover-source-invalid',
+    ]);
+    expect(validateBook(makeBook({ coverUrl: null, coverSourceUrl: null }))).toEqual([]);
+  });
+
+  it("forgets a cover's source when the cover is taken away", () => {
+    expect(normalizeBook(makeBook({ coverUrl: ' ' })).coverSourceUrl).toBeNull();
   });
 
   it('requires a title within the limit', () => {
@@ -68,12 +89,13 @@ describe('validateBook', () => {
     const long = 'x'.repeat(BOOK_LIMITS.synopsis + 1);
     expect(validateBook(makeBook({ synopsis: long }))).toEqual(['synopsis-too-long']);
     expect(validateBook(makeBook({ synopsisSource: 'anilist' }))).toEqual([]);
+    expect(validateBook(makeBook({ synopsisSource: 'publisher' }))).toEqual([]);
     expect(validateBook(makeBook({ synopsisSource: 'blog' as never }))).toEqual([
       'synopsis-source-invalid',
     ]);
-    expect(validateBook(makeBook({ synopsis: null, synopsisSource: 'wikipedia' }))).toEqual([
-      'synopsis-source-invalid',
-    ]);
+    expect(
+      validateBook(makeBook({ synopsis: null, synopsisSource: 'wikipedia', synopsisUrl: null })),
+    ).toEqual(['synopsis-source-invalid']);
   });
 
   it.each(['http://example.com/sinopse', 'javascript:alert(1)', 'sinopse'])(

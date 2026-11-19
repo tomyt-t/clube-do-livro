@@ -9,6 +9,7 @@ describe('toBookData', () => {
     const data = toBookData({ ...makeBook({ title: '  Torto   Arado ' }), extra: 'x' } as never);
     expect(data.title).toBe('Torto Arado');
     expect(Object.keys(data).sort()).toEqual([
+      'coverSourceUrl',
       'coverUrl',
       'synopsis',
       'synopsisSource',

@@ -36,6 +36,8 @@ interface BallotDeckProps {
   wide: boolean;
   /** Off while a dialog is open, so arrows do not move cards behind it. */
   keyboard: boolean;
+  /** The reading to open on (its synopsis was tapped in the list); the first otherwise. */
+  startAt?: NominationId | null;
   onPick: (id: NominationId) => void;
   onDislike: (id: NominationId) => void;
 }
@@ -48,10 +50,17 @@ export function BallotDeck({
   own,
   wide,
   keyboard,
+  startAt = null,
   ...on
 }: BallotDeckProps) {
   const deckRef = useDeckTop();
-  const [at, setAt] = useState({ index: 0, direction: 0 });
+  const [at, setAt] = useState(() => ({
+    index: Math.max(
+      0,
+      options.findIndex((option) => option.id === startAt),
+    ),
+    direction: 0,
+  }));
   const total = options.length;
 
   const move = useCallback(

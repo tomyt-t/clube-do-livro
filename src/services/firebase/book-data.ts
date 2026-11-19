@@ -37,6 +37,7 @@ export function toBookData(book: Book): Book {
     synopsisSource: clean.synopsisSource,
     synopsisUrl: encodeLink(clean.synopsisUrl),
     coverUrl: encodeLink(clean.coverUrl),
+    coverSourceUrl: encodeLink(clean.coverSourceUrl),
   };
   const errors = validateBook(data);
   if (errors.length > 0) throw new InvalidBookError(errors);

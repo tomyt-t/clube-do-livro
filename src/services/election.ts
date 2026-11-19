@@ -9,7 +9,7 @@ import type { FlowStep } from '@/domain/flow';
 import {
   ballotOptions,
   openingResults,
-  settleFindings,
+  flagsFor,
   type ConflictGroup,
   type DuplicateFindings,
 } from '@/domain/review';
@@ -136,10 +136,9 @@ export async function takeFlowStep(
       await flow.startReview(cycle.id);
       return;
     case 'check': {
-      // The same work is merged into its first nomination; doubts go to the organizer.
+      // The check only points; the organizer validates every group.
       const found = await checkNominations(context.checker, cycle, context.nominations);
-      const { merged, flags } = settleFindings(found, cycle);
-      await flow.recordReview(cycle.id, flags, merged);
+      await flow.recordReview(cycle.id, flagsFor(found, cycle));
       return;
     }
     case 'open-voting':

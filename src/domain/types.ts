@@ -20,13 +20,19 @@ export interface Book {
   synopsis: string | null;
   /** Where the synopsis text came from, for credit; null when the member wrote it. */
   synopsisSource: SynopsisSource | null;
-  /** Optional link to a synopsis, pasted by the member. */
+  /**
+   * The page the synopsis came from, required with a synopsis (older
+   * nominations may lack it). The reading's nominator may change it later.
+   */
   synopsisUrl: string | null;
   /** An https image suggested by a catalog, or a small uploaded image (`data:image/...`). */
   coverUrl: string | null;
+  /** The page the cover came from, required with a cover (older nominations lack it). */
+  coverSourceUrl: string | null;
 }
 
-export type SynopsisSource = 'wikipedia' | 'open-library' | 'google-books' | 'anilist';
+export type SynopsisSource =
+  'publisher' | 'google-books' | 'wikipedia' | 'open-library' | 'anilist';
 
 export type CycleStatus =
   | 'nominating'

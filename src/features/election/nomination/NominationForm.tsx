@@ -7,14 +7,12 @@ import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { Notice } from '@/ui/Notice';
 import { TextField } from '@/ui/TextField';
 
-import { checkDraft, EMPTY_DRAFT, type Draft, type DraftErrors } from './draft';
+import { checkDraft, EMPTY_DRAFT, type Draft } from './draft';
 import styles from './NominationForm.module.css';
 import { ReviewNomination } from './ReviewNomination';
 import { useSendAnswer } from './use-send-answer';
 
 type Stage = 'choose' | 'details' | 'review';
-
-const NO_ERRORS: DraftErrors = { title: null, link: null };
 
 function ChooseAnswer({ onNominate, onPass }: { onNominate: () => void; onPass: () => void }) {
   return (
@@ -42,7 +40,7 @@ interface DetailsFormProps {
 }
 
 function DetailsForm({ draft, onChange, onBack, onNext }: DetailsFormProps) {
-  const [errors, setErrors] = useState<DraftErrors>(NO_ERRORS);
+  const [error, setError] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -52,8 +50,8 @@ function DetailsForm({ draft, onChange, onBack, onNext }: DetailsFormProps) {
   /** Only typos stop the member: a reading nominated twice is sorted out after the call. */
   const submit = () => {
     const found = checkDraft(draft);
-    setErrors(found);
-    if (!found.title && !found.link) onNext();
+    setError(found);
+    if (!found) onNext();
   };
 
   return (
@@ -67,27 +65,24 @@ function DetailsForm({ draft, onChange, onBack, onNext }: DetailsFormProps) {
     >
       <TextField
         ref={titleRef}
-        label="Título / autor"
+        label="Título"
         value={draft.title}
         maxLength={200}
         autoComplete="off"
-        hint="Por exemplo: Torto Arado, Itamar Vieira Junior"
-        error={errors.title}
+        hint="Por exemplo: Torto Arado"
+        error={error}
         onChange={(event) => {
           onChange({ ...draft, title: event.target.value });
         }}
       />
       <TextField
-        label="Link para a sinopse (opcional)"
-        type="url"
-        inputMode="url"
-        value={draft.link}
+        label="Autor (opcional)"
+        value={draft.author}
+        maxLength={120}
         autoComplete="off"
-        placeholder="https://"
-        hint="Se for da Wikipédia, a sinopse vem de lá."
-        error={errors.link}
+        hint="Ajuda a achar a capa e a sinopse certas."
         onChange={(event) => {
-          onChange({ ...draft, link: event.target.value });
+          onChange({ ...draft, author: event.target.value });
         }}
       />
       <div className={styles.actions}>

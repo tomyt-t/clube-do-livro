@@ -21,13 +21,17 @@ export type BookError =
   | 'title-too-long'
   | 'synopsis-too-long'
   | 'synopsis-source-invalid'
+  | 'synopsis-link-missing'
   | 'synopsis-link-invalid'
-  | 'cover-invalid';
+  | 'cover-invalid'
+  | 'cover-source-missing'
+  | 'cover-source-invalid';
 
 export const SYNOPSIS_SOURCES: readonly SynopsisSource[] = [
+  'publisher',
+  'google-books',
   'wikipedia',
   'open-library',
-  'google-books',
   'anilist',
 ];
 
@@ -49,12 +53,14 @@ export function normalizeSynopsis(text: string | null): string | null {
 /** Collapses whitespace in the title and turns blank fields into nothing. */
 export function normalizeBook(book: Book): Book {
   const synopsis = normalizeSynopsis(book.synopsis);
+  const coverUrl = nullIfBlank(book.coverUrl);
   return {
     title: book.title.replace(/\s+/g, ' ').trim(),
     synopsis,
     synopsisSource: synopsis === null ? null : book.synopsisSource,
     synopsisUrl: nullIfBlank(book.synopsisUrl),
-    coverUrl: nullIfBlank(book.coverUrl),
+    coverUrl,
+    coverSourceUrl: coverUrl === null ? null : nullIfBlank(book.coverSourceUrl),
   };
 }
 
@@ -81,14 +87,22 @@ function linkErrors(book: Book): BookError[] {
   if (cover !== null && !isSecureLink(cover) && !isUploadedCover(cover)) {
     errors.push('cover-invalid');
   }
-  return errors;
+  return [...errors, ...coverSourceErrors(book)];
 }
 
-function synopsisErrors({ synopsis, synopsisSource }: Book): BookError[] {
+/** Every cover says where it came from: a catalog's page, or the page the member's image is from. */
+function coverSourceErrors({ coverUrl, coverSourceUrl }: Book): BookError[] {
+  if (coverSourceUrl !== null && !isSecureLink(coverSourceUrl)) return ['cover-source-invalid'];
+  return coverUrl !== null && coverSourceUrl === null ? ['cover-source-missing'] : [];
+}
+
+function synopsisErrors({ synopsis, synopsisSource, synopsisUrl }: Book): BookError[] {
   const errors: BookError[] = [];
   if (synopsis !== null && synopsis.length > BOOK_LIMITS.synopsis) {
     errors.push('synopsis-too-long');
   }
+  // A synopsis always says where it came from, typed or found.
+  if (synopsis !== null && synopsisUrl === null) errors.push('synopsis-link-missing');
   const knownSource = synopsisSource === null || SYNOPSIS_SOURCES.includes(synopsisSource);
   if (!knownSource || (synopsisSource !== null && synopsis === null)) {
     errors.push('synopsis-source-invalid');
