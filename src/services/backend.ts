@@ -178,6 +178,15 @@ export interface DuplicateChecker {
   findDuplicates(nominations: readonly Nomination[]): Promise<DuplicateFindings>;
 }
 
+/**
+ * Translates a synopsis found in another language into Portuguese, only
+ * when a member asks; they review it before sending.
+ */
+export interface SynopsisTranslator {
+  /** `title` is how the member wrote it, so the text names the book that way. */
+  translate(text: string, title: string): Promise<string>;
+}
+
 // ------------------------------------------------------------------ admin
 
 export interface OpenCycleInput {
@@ -237,4 +246,6 @@ export interface Backend {
   flow: FlowPort;
   admin: AdminPort;
   checker: DuplicateChecker;
+  /** Null where no model is configured: the button does not show. */
+  translator: SynopsisTranslator | null;
 }

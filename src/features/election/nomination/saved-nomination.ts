@@ -57,7 +57,7 @@ function toSynopsisChoice(value: unknown): SynopsisChoice | null {
   const { text, sourceUrl, label } = value;
   const source = toSource(value.source);
   if (!isText(text) || !isText(sourceUrl) || !isText(label) || !source) return null;
-  return { text, sourceUrl, label, source };
+  return { text, sourceUrl, label, source, ...(value.foreign === true ? { foreign: true } : {}) };
 }
 
 function toCoverPick(value: unknown): CoverPick | null {
@@ -74,7 +74,13 @@ function toCoverPick(value: unknown): CoverPick | null {
 function toSynopsisPick(value: unknown): SynopsisPick | null {
   if (!isFields(value)) return null;
   if (value.kind === 'own' && isText(value.text)) {
-    return { kind: 'own', text: value.text, from: toSynopsisChoice(value.from) };
+    const from = toSynopsisChoice(value.from);
+    return {
+      kind: 'own',
+      text: value.text,
+      from,
+      ...(value.translated === true ? { translated: true } : {}),
+    };
   }
   const option = value.kind === 'found' ? toSynopsisChoice(value.option) : null;
   return option ? { kind: 'found', option } : null;

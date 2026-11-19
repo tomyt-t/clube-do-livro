@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Nomination, OwnAnswer } from '@/domain/types';
 import { createDemoBackend, createDemoState, type DemoScenario } from '@/services/demo';
-import { lookupBook, NOTHING_FOUND, type LookupResult } from '@/services/lookup';
+import {
+  lookupBook,
+  NOTHING_FOUND,
+  type LookupResult,
+  type SynopsisChoice,
+} from '@/services/lookup';
 import { firstValue, settle } from '@/test/backend';
 import { renderAsMember } from '@/test/render';
 
@@ -326,6 +331,62 @@ describe('ElectionPage, nominations', () => {
       await screen.findByText('Nenhuma capa encontrada. Envie uma imagem ou siga sem capa.'),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Enviar indicação' })).toBeEnabled();
+  });
+
+  it('translates a synopsis in another language on request, keeping its source', async () => {
+    const english: SynopsisChoice = {
+      text: 'A sailor falls from grace.',
+      sourceUrl: 'https://books.google.com/books?id=2',
+      source: 'google-books',
+      label: 'Google Livros · Vintage · inglês',
+      foreign: true,
+    };
+    vi.mocked(lookupBook).mockResolvedValue({ ...FOUND, synopses: [english] });
+    const { user, backend } = renderElection();
+    await fillDetails(user, 'O marinheiro');
+
+    await user.click(await screen.findByRole('button', { name: 'Traduzir para o português' }));
+    expect(await screen.findByLabelText('Sinopse')).toHaveValue(
+      '(Tradução de demonstração) A sailor falls from grace.',
+    );
+    expect(
+      screen.getByText(
+        'Tradução automática do texto de: Google Livros · Vintage · inglês. Confira antes de enviar.',
+      ),
+    ).toBeInTheDocument();
+    await confirmSending(user);
+    expect(await sentBook(backend)).toMatchObject({
+      synopsis: '(Tradução de demonstração) A sailor falls from grace.',
+      synopsisSource: 'google-books',
+      synopsisUrl: 'https://books.google.com/books?id=2',
+    });
+  });
+
+  it('offers no translation for a synopsis already in Portuguese', async () => {
+    const { user } = renderElection();
+    await fillDetails(user, 'Berserk');
+    expect(await screen.findByText('Guts é um guerreiro errante.')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Traduzir para o português' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers the same author's closest title when nothing has the title typed", async () => {
+    vi.mocked(lookupBook).mockResolvedValue({
+      ...FOUND,
+      work: {
+        title: 'Coração de Cão',
+        authors: ['Mikhail Bulgakov'],
+        details: 'Alêtheia Editores',
+      },
+      approximate: true,
+    });
+    const { user } = renderElection();
+    await fillDetails(user, 'Coração de Cachorro', 'Mikhail Bulgakov');
+
+    expect(await screen.findByText(/O mais próximo, do mesmo autor/)).toHaveTextContent(
+      'Não achamos “Coração de Cachorro”. O mais próximo, do mesmo autor: Coração de Cão (Alêtheia Editores).',
+    );
   });
 
   it('shows members what they already answered, and only their own book', async () => {

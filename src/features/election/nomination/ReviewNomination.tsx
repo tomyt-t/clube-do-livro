@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { splitTitle } from '@/domain/book';
 import type { Book } from '@/domain/types';
-import type { LookupResult } from '@/services/lookup';
+import type { LookupResult, WorkSummary } from '@/services/lookup';
 import { BookCover } from '@/ui/BookCover';
 import { Button } from '@/ui/Button';
 
@@ -38,18 +38,48 @@ function BookPreview({ book }: { book: Book }) {
 }
 
 /** Which reading the search settled on, so a wrong match is easy to spot. */
-function FoundWork({ result }: { result: LookupResult | null }) {
-  if (result === null) return null;
-  const { work, others } = result;
-  if (work === null) {
-    return (
-      <p className={styles.found}>
-        Não achamos esta leitura nos catálogos. Envie uma capa e cole a sinopse, se quiser.
-      </p>
-    );
-  }
+function credits(work: WorkSummary) {
   const by = work.authors.length > 0 ? `, de ${work.authors.join(', ')}` : '';
   const details = work.details ? ` (${work.details})` : '';
+  return { by, details };
+}
+
+/** Nothing under the title typed, but the same author's book with a close title. */
+function ClosestWork({ work, typed }: { work: WorkSummary; typed: string }) {
+  const { details } = credits(work);
+  return (
+    <p className={styles.found}>
+      Não achamos “{typed}”. O mais próximo, do mesmo autor: <b>{work.title}</b>
+      {details}. Se for o mesmo livro em outra tradução, use a capa e a sinopse abaixo; se não,
+      envie as suas.
+    </p>
+  );
+}
+
+interface FoundWorkProps {
+  result: LookupResult | null;
+  typed: string;
+  /** Without an author, other translations' titles are not looked for. */
+  hasAuthor: boolean;
+}
+
+function NothingFound({ hasAuthor }: { hasAuthor: boolean }) {
+  return (
+    <p className={styles.found}>
+      Não achamos esta leitura nos catálogos.{' '}
+      {hasAuthor
+        ? 'Envie uma capa e cole a sinopse, se quiser.'
+        : 'Volte e escreva o autor: assim procuramos também outras traduções.'}
+    </p>
+  );
+}
+
+function FoundWork({ result, typed, hasAuthor }: FoundWorkProps) {
+  if (result === null) return null;
+  const { work, others } = result;
+  if (work === null) return <NothingFound hasAuthor={hasAuthor} />;
+  if (result.approximate) return <ClosestWork work={work} typed={typed} />;
+  const { by, details } = credits(work);
   return (
     <p className={styles.found}>
       Encontramos: <b>{work.title}</b>
@@ -103,7 +133,11 @@ export function ReviewNomination(props: ReviewNominationProps) {
         Voltar e trocar o livro
       </Button>
       <BookPreview book={book} />
-      <FoundWork result={result} />
+      <FoundWork
+        result={result}
+        typed={draft.title.trim()}
+        hasAuthor={draft.author.trim() !== ''}
+      />
       <CoverPicker
         covers={result?.covers ?? null}
         pick={cover}

@@ -16,6 +16,8 @@ export interface FirebaseServices {
   app: FirebaseApp;
   auth: Auth;
   db: Firestore;
+  /** On the local emulators (`npm run dev:emulator`). */
+  emulators?: boolean;
 }
 
 /** Where `npm run dev:emulator` serves them (ports in firebase.json). */
@@ -52,7 +54,27 @@ export function initFirebase(
     connectFirestoreEmulator(db, EMULATOR_HOST, FIRESTORE_EMULATOR_PORT);
   }
 
-  return { app, auth, db };
+  return { app, auth, db, emulators };
+}
+
+interface EmulatorCode {
+  email?: string;
+  requestType?: string;
+  oobLink?: string;
+}
+
+/**
+ * The emulators send no email: the sign-in link waits in the Auth emulator.
+ * Opening it at once signs the person in, as the email link would.
+ */
+export async function openEmulatorSignInLink(app: FirebaseApp, email: string) {
+  const projectId = app.options.projectId ?? '';
+  const response = await fetch(`${AUTH_EMULATOR}/emulator/v1/projects/${projectId}/oobCodes`);
+  const { oobCodes = [] } = (await response.json()) as { oobCodes?: EmulatorCode[] };
+  const link = oobCodes
+    .filter((code) => code.email === email && code.requestType === 'EMAIL_SIGNIN')
+    .at(-1)?.oobLink;
+  if (link) window.location.assign(link);
 }
 
 /**

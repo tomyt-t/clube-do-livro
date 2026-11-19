@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { rankSynopses, summarize, type SourcedSynopsis } from './rank';
+import { looseGate, rankSynopses, summarize, type SourcedSynopsis } from './rank';
 import type { Candidate } from './types';
 
 const PT =
@@ -22,6 +22,7 @@ describe('rankSynopses', () => {
     const ranked = rankSynopses([found(EN, { source: 'publisher' }), found(PT)]);
     expect(ranked.map((option) => option.text)).toEqual([PT, EN]);
     expect(ranked[1]?.label).toBe('Site da editora · inglês');
+    expect(ranked.map((option) => option.foreign)).toEqual([undefined, true]);
   });
 
   it('keeps the same text once and names the part of the page', () => {
@@ -65,6 +66,15 @@ describe('summarize', () => {
     ]);
   });
 
+  it('shows the plainest title that matched exactly', () => {
+    const members = [
+      { candidate: { ...edition(['Kentaro Miura']), title: 'Berserk: 4. 19' }, exact: true },
+      { candidate: { ...edition(['Kentaro Miura']), title: 'Berserk' }, exact: true },
+      { candidate: { ...edition([]), title: 'B' }, exact: false },
+    ].map((member) => ({ ...member, author: true }));
+    expect(summarize({ key: 'berserk', members, score: 0 }).title).toBe('Berserk');
+  });
+
   it('lists an author once, whatever the accents', () => {
     const members = [edition(['Itamar Vieira Junior', 'Itamar Vieira Júnior'])].map(
       (candidate) => ({ candidate, exact: true, author: true }),
@@ -72,5 +82,37 @@ describe('summarize', () => {
     expect(summarize({ key: 'torto arado', members, score: 0 }).authors).toEqual([
       'Itamar Vieira Júnior',
     ]);
+  });
+});
+
+describe('looseGate', () => {
+  const titled = (title: string, authors: string[]): Candidate => ({
+    ...edition(authors),
+    titles: [title],
+    title,
+  });
+  const dogHeart = titled('Coração de Cão', ['Mikhail Bulgakov']);
+
+  it("takes another translation's title, only with the author typed", () => {
+    expect(
+      looseGate({ title: 'Coração de Cachorro', author: 'Mikhail Bulgákov' }, [dogHeart]),
+    ).toHaveLength(1);
+    expect(looseGate({ title: 'Coração de Cachorro', author: null }, [dogHeart])).toHaveLength(0);
+    expect(
+      looseGate({ title: 'Coração de Cachorro', author: 'Clarice Lispector' }, [dogHeart]),
+    ).toHaveLength(0);
+    expect(
+      looseGate({ title: 'O Mestre e Margarida', author: 'Bulgakov' }, [dogHeart]),
+    ).toHaveLength(0);
+  });
+
+  it('keeps volumes apart', () => {
+    const second = titled('Os Mercenários 2', ['Ana Souza']);
+    expect(
+      looseGate({ title: 'Mercenários do Sul 1', author: 'Ana Souza' }, [second]),
+    ).toHaveLength(0);
+    expect(
+      looseGate({ title: 'Mercenários do Sul 2', author: 'Ana Souza' }, [second]),
+    ).toHaveLength(1);
   });
 });

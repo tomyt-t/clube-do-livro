@@ -65,6 +65,8 @@ export interface SynopsisChoice {
   source: LookupSource;
   /** "Site da Rocco", "Google Livros · Rocco" or "Wikipédia · início do enredo". */
   label: string;
+  /** Not in Portuguese: the member may ask for a translation. */
+  foreign?: boolean;
 }
 
 export interface WorkSummary {
@@ -81,6 +83,11 @@ export interface LookupResult {
   synopses: SynopsisChoice[];
   /** Other readings with the same title, when the choice was close. */
   others: WorkSummary[];
+  /**
+   * Nothing had the title typed: this is the typed author's book with the
+   * closest title, often the same book in another translation.
+   */
+  approximate?: boolean;
 }
 
 /** An image's size, or null if it did not load. */

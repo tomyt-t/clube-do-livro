@@ -36,6 +36,8 @@ const POLICY: Record<string, string[]> = {
     'https://openlibrary.org',
     'https://graphql.anilist.co',
     'https://*.wikipedia.org',
+    // A work's titles in other languages (src/services/lookup/original.ts).
+    'https://www.wikidata.org',
     // The publishers' catalogs in src/services/lookup/publishers.ts.
     'https://rocco.com.br',
     'https://intrinseca.com.br',

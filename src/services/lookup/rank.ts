@@ -4,6 +4,7 @@ import { detectLanguage, type TextLanguage } from './language';
 import {
   isAdaptation,
   isBrazilianIsbn,
+  isLooseMatch,
   isPortugueseIsbn,
   mainTitle,
   matchAuthor,
@@ -63,6 +64,13 @@ export function gate(query: Query, candidates: readonly Candidate[]): Matched[] 
     if (author === false) return [];
     return [{ candidate, exact: title.exact, author }];
   });
+}
+
+/** When nothing has the title typed: the typed author's books with a close title. */
+export function looseGate(query: Query, candidates: readonly Candidate[]): Matched[] {
+  return candidates
+    .filter((candidate) => isLooseMatch(query, candidate))
+    .map((candidate) => ({ candidate, exact: false, author: true }));
 }
 
 export interface Work {
@@ -151,14 +159,32 @@ function bestCredited(candidates: readonly Candidate[]): Candidate | undefined {
   return [...credited].sort((a, b) => agreement(b) - agreement(a))[0];
 }
 
+/**
+ * Among the titles that are exactly the one typed, the one most catalogs
+ * use, then the shortest: "O Hobbit", and "Berserk" rather than "Berserk: 4. 19".
+ */
+function plainestTitle(work: Work): string | undefined {
+  const titles = work.members.filter((m) => m.exact).map((m) => m.candidate.title);
+  const count = (title: string) => titles.filter((t) => normalize(t) === normalize(title)).length;
+  return [...titles].sort((a, b) => count(b) - count(a) || a.length - b.length)[0];
+}
+
+/** "Yukio Mishima, pseud." → "Yukio Mishima". */
+const cleanName = (name: string) =>
+  name.replace(/,?\s*\(?pseud(?:onym|ônimo|onimo)?\.?\)?\s*$/i, '').trim();
+
 export function summarize(work: Work): WorkSummary {
   const candidates = work.members.map((m) => m.candidate);
   const best = bestCredited(candidates) ?? candidates[0];
   const edition = candidates.find((c) => isBrazilianIsbn(c.isbn)) ?? best;
   return {
-    title: best?.title ?? '',
+    title: plainestTitle(work) ?? best?.title ?? '',
     // "Itamar Vieira Junior" and "Itamar Vieira Júnior" are one author.
-    authors: [...new Map((best?.authors ?? []).map((name) => [normalize(name), name])).values()],
+    authors: [
+      ...new Map(
+        (best?.authors ?? []).map(cleanName).map((name) => [normalize(name), name]),
+      ).values(),
+    ],
     details: edition ? detailsOf(edition) : '',
   };
 }
@@ -294,6 +320,7 @@ function optionOf(found: SourcedSynopsis): Option | null {
     sourceUrl: found.synopsis.sourceUrl,
     source,
     label: synopsisLabel(found, language),
+    ...(language === 'en' || language === 'other' ? { foreign: true } : {}),
   };
   return { choice, source, score };
 }

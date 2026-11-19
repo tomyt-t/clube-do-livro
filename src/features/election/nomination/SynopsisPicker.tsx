@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 
+import { useBackend } from '@/app/services';
 import type { SynopsisChoice } from '@/services/lookup';
 import { Button } from '@/ui/Button';
 import { cx } from '@/ui/cx';
@@ -43,7 +44,57 @@ function Pill({ name, checked, label, onPick }: PillProps) {
   );
 }
 
-function Found({ option, onEdit }: { option: SynopsisChoice; onEdit: () => void }) {
+type Translation = 'idle' | 'busy' | 'failed';
+
+/** For a text in another language: Gemini's translation, to check in the box. */
+interface TranslateProps {
+  option: SynopsisChoice;
+  /** As the member typed it, for the translation to name the book that way. */
+  title: string;
+  onDone: (text: string) => void;
+}
+
+function Translate({ option, title, onDone }: TranslateProps) {
+  const { translator } = useBackend();
+  const [state, setState] = useState<Translation>('idle');
+  if (!translator || !option.foreign) return null;
+  return (
+    <>
+      <Button
+        variant="quiet"
+        disabled={state === 'busy'}
+        onClick={() => {
+          setState('busy');
+          void translator.translate(option.text, title).then(
+            (text) => {
+              setState('idle');
+              onDone(text);
+            },
+            () => {
+              setState('failed');
+            },
+          );
+        }}
+      >
+        {state === 'busy' ? 'Traduzindo…' : 'Traduzir para o português'}
+      </Button>
+      {state === 'failed' && (
+        <p className={styles.status} role="alert">
+          Não foi possível traduzir agora. O texto original continua aqui.
+        </p>
+      )}
+    </>
+  );
+}
+
+interface FoundProps {
+  option: SynopsisChoice;
+  title: string;
+  onEdit: () => void;
+  onTranslated: (text: string) => void;
+}
+
+function Found({ option, title, onEdit, onTranslated }: FoundProps) {
   return (
     <div className={styles.found}>
       <div className={styles.text}>
@@ -53,12 +104,26 @@ function Found({ option, onEdit }: { option: SynopsisChoice; onEdit: () => void 
         <p className={styles.credit}>
           <ExternalLink href={option.sourceUrl}>{withHost('Fonte', option.sourceUrl)}</ExternalLink>
         </p>
+        <Translate
+          key={option.sourceUrl + option.text.slice(0, 40)}
+          option={option}
+          title={title}
+          onDone={onTranslated}
+        />
         <Button variant="quiet" onClick={onEdit}>
           Editar este texto
         </Button>
       </div>
     </div>
   );
+}
+
+function hintFor(pick: OwnSynopsis): string {
+  if (pick.from && pick.translated) {
+    return `Tradução automática do texto de: ${pick.from.label}. Confira antes de enviar.`;
+  }
+  if (pick.from) return `Editando o texto de: ${pick.from.label}.`;
+  return 'Cole a sinopse da contracapa ou do site da editora. Em branco, a indicação vai sem sinopse.';
 }
 
 /** The box for a synopsis found elsewhere; left blank, the nomination goes without one. */
@@ -77,11 +142,7 @@ function PasteBox({
       value={pick.text}
       rows={8}
       maxLength={2000}
-      hint={
-        pick.from
-          ? `Editando o texto de: ${pick.from.label}.`
-          : 'Cole a sinopse da contracapa ou do site da editora. Em branco, a indicação vai sem sinopse.'
-      }
+      hint={hintFor(pick)}
       error={error}
       onChange={(event) => {
         onChange({ ...pick, text: event.target.value });
@@ -191,8 +252,12 @@ export function SynopsisPicker({ options, pick, error, title, onPick }: Synopsis
       {pick.kind === 'found' ? (
         <Found
           option={pick.option}
+          title={title}
           onEdit={() => {
             write({ kind: 'own', text: pick.option.text, from: pick.option });
+          }}
+          onTranslated={(text) => {
+            write({ kind: 'own', text, from: pick.option, translated: true });
           }}
         />
       ) : (

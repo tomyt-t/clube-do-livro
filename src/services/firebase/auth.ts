@@ -14,7 +14,7 @@ import { normalizeEmail } from '@/domain/email';
 
 import type { Access, AuthPort, SessionUser } from '../backend';
 
-import type { FirebaseServices } from './app';
+import { openEmulatorSignInLink, type FirebaseServices } from './app';
 import { guard, isCancelledSignIn, toBackendError } from './errors';
 import { claimSeat } from './member-writes';
 import { refs } from './refs';
@@ -122,6 +122,7 @@ export function createFirebaseAuth(services: FirebaseServices): AuthPort {
         sendSignInLinkToEmail(auth, address, { url: currentPageUrl(), handleCodeInApp: true }),
       );
       writePendingEmail(address);
+      if (services.emulators) await openEmulatorSignInLink(services.app, address);
     },
 
     completeSignInLink: async (email) => {

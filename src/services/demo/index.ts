@@ -41,6 +41,10 @@ export function createDemoBackend(options: DemoOptions = {}): DemoBackend {
     flow: createDemoFlow(context),
     admin: createDemoAdmin(context),
     checker: exactChecker,
+    // No model in the demo: a stand-in that shows where the translation goes.
+    translator: {
+      translate: (text) => Promise.resolve(`(Tradução de demonstração) ${text}`),
+    },
     personas: DEMO_PERSONAS,
     loadScenario: (scenario) => {
       context.store.update((draft) => {

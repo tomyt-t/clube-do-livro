@@ -29,7 +29,13 @@ export type CoverPick =
  */
 export type SynopsisPick =
   | { kind: 'found'; option: SynopsisChoice }
-  | { kind: 'own'; text: string; from: SynopsisChoice | null };
+  | {
+      kind: 'own';
+      text: string;
+      from: SynopsisChoice | null;
+      /** A machine translation of `from`, for the member to check. */
+      translated?: boolean;
+    };
 
 export type OwnSynopsis = Extract<SynopsisPick, { kind: 'own' }>;
 

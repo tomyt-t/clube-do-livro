@@ -11,7 +11,10 @@ import type { Candidate, FoundSynopsis, Query, SourceRequest } from './types';
  * paragraph, which sets the story up, not the ones that tell how it ends.
  */
 
-export function wikipediaSearchUrl(query: Query): string {
+/** Portuguese for the reading typed; English for its original title (see original.ts). */
+export type WikiLanguage = 'pt' | 'en';
+
+export function wikipediaSearchUrl(query: Query, language: WikiLanguage = 'pt'): string {
   const params = new URLSearchParams({
     action: 'query',
     format: 'json',
@@ -27,7 +30,7 @@ export function wikipediaSearchUrl(query: Query): string {
     inprop: 'url',
     redirects: '1',
   });
-  return `https://pt.wikipedia.org/w/api.php?${params.toString()}`;
+  return `https://${language}.wikipedia.org/w/api.php?${params.toString()}`;
 }
 
 /** "Berserk (mangá)" → "Berserk"; the parenthesis tells the kind. */
@@ -47,18 +50,26 @@ const KINDS = /(mang[aá]|light novel|banda desenhada|quadrinhos|hq)/i;
 const NOT_A_READING =
   /(filme|série de televisão|telenovela|álbum|canção|banda|desambiguação|jogo)/i;
 
+/** A lead that names another kind of work: "… é uma canção de forró", "… é um documentário". */
+const ANOTHER_KIND = [
+  /\be (um|uma) (cancao|single|filme|documentario|telenovela|album|videojogo|jogo eletronico|programa de televisao|serie (de televisao|de tv|televisiva|animada))\b/,
+  /\bis an? ([a-z0-9-]+ ){0,3}(song|single|film|documentary|album|television series|video game)\b/,
+];
+
 function imageOf(page: Record<string, unknown>, sourceUrl: string) {
   const image = isRecord(page.original) ? textAt(page.original, 'source') : null;
   return image?.startsWith('https://') ? { url: image, sourceUrl } : null;
 }
 
-function toCandidate(page: unknown): Candidate | null {
+function toCandidate(page: unknown, language: WikiLanguage): Candidate | null {
   if (!isRecord(page)) return null;
   const title = textAt(page, 'title');
   const url = textAt(page, 'fullurl');
   const extract = textAt(page, 'extract');
   if (!title || !url || !extract || NOT_A_READING.test(title)) return null;
   const paragraph = firstParagraph(extract);
+  const lead = normalize(paragraph).slice(0, 300);
+  if (ANOTHER_KIND.some((kind) => kind.test(lead))) return null;
   return {
     source: 'wikipedia',
     titles: [plainTitle(title)],
@@ -72,22 +83,27 @@ function toCandidate(page: unknown): Candidate | null {
     kind: KINDS.test(title) ? 'manga' : 'book',
     cover: imageOf(page, url),
     synopsis: { raw: extract, sourceUrl: url },
-    article: { title, url },
+    // The plot section is read in Portuguese articles only.
+    ...(language === 'pt' ? { article: { title, url } } : {}),
   };
 }
 
-export function readWikipedia(json: unknown): Candidate[] {
+export function readWikipedia(json: unknown, language: WikiLanguage = 'pt'): Candidate[] {
   const pages = isRecord(json) && isRecord(json.query) ? json.query.pages : null;
   if (!Array.isArray(pages)) return [];
   return pages
     .slice()
     .sort((a, b) => (isRecord(a) && isRecord(b) ? Number(a.index) - Number(b.index) : 0))
-    .map(toCandidate)
+    .map((page) => toCandidate(page, language))
     .filter((candidate) => candidate !== null);
 }
 
-export async function searchWikipedia(query: Query, request: SourceRequest) {
-  return readWikipedia(await fetchJson(wikipediaSearchUrl(query), request));
+export async function searchWikipedia(
+  query: Query,
+  request: SourceRequest,
+  language: WikiLanguage = 'pt',
+) {
+  return readWikipedia(await fetchJson(wikipediaSearchUrl(query, language), request), language);
 }
 
 /** Plot sections, by their usual headings (not "Narrativa" or "História", which discuss other things). */

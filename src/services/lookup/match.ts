@@ -122,6 +122,33 @@ export function matchAuthor(typed: string | null, authors: readonly string[]): b
   return known.has(surname) || wanted.some((word) => word.length >= 4 && known.has(word));
 }
 
+const LINKING = new Set(['de', 'da', 'do', 'dos', 'das', 'of', 'and', ...ARTICLES]);
+
+/** The words that carry a title: "Coração de Cachorro" → coracao, cachorro. */
+function titleWords(title: string): string[] {
+  return mainTitle(title)
+    .split(' ')
+    .filter((word) => word.length >= 3 && !LINKING.has(word));
+}
+
+/**
+ * The same book under another translation's title ("Coração de Cão" for
+ * "Coração de Cachorro"): only with the author typed matching, the same
+ * volume number, and at least half the typed title's words in theirs.
+ */
+export function isLooseMatch(
+  query: { title: string; author: string | null },
+  candidate: { titles: readonly string[]; authors: readonly string[] },
+): boolean {
+  if (matchAuthor(query.author, candidate.authors) !== true) return false;
+  const volume = numbersIn(query.title).join(' ');
+  if (!candidate.titles.some((title) => numbersIn(title).join(' ') === volume)) return false;
+  const typed = titleWords(query.title);
+  const theirs = new Set(candidate.titles.flatMap(titleWords));
+  const shared = typed.filter((word) => theirs.has(word)).length;
+  return shared > 0 && shared * 2 >= typed.length;
+}
+
 /** Brazilian ISBNs start with 978-85 or 978-65 (85 or 65 in ten digits). */
 export function isBrazilianIsbn(isbn: string | null): boolean {
   const digits = (isbn ?? '').replace(/\D/g, '');

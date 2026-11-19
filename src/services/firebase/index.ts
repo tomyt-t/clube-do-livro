@@ -8,6 +8,7 @@ import { createFirebaseAuth } from './auth';
 import { createFirebaseChecker } from './checker';
 import { createFirebaseClub } from './club';
 import { createFirebaseFlow } from './flow';
+import { createFirebaseTranslator } from './translator';
 
 type FirebaseAppConfig = Extract<AppConfig, { mode: 'firebase' }>;
 
@@ -22,5 +23,6 @@ export function createFirebaseBackend(config: FirebaseAppConfig): Backend {
     flow: createFirebaseFlow(services),
     admin: createFirebaseAdmin(services),
     checker: createFirebaseChecker(aiApp, config.aiModel),
+    translator: createFirebaseTranslator(aiApp, config.aiModel),
   };
 }
