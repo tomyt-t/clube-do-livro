@@ -54,7 +54,7 @@
     "firebase-tools": "15.34.2",
     "globals": "16.5.0",
     "husky": "9.1.7",
-    "jsdom": "26.1.0",
+    "jsdom": "31.0.1",
     "lint-staged": "17.6.0",
     "prettier": "3.9.10",
     "typescript": "5.9.3",
